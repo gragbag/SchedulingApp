@@ -1,98 +1,109 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { router } from "expo-router";
+import React, { useMemo } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { DayAgenda } from "../../components/DayAgenda";
+import { dayKeyLocal, formatDateLong, parseISO } from "../../lib/datetime";
+import { useAppStore } from "../../lib/store";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+	const events = useAppStore((s) => s.events);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+	const today = useMemo(() => new Date(), []);
+
+	const todaysEvents = useMemo(() => {
+		const day = today.toISOString().slice(0, 10);
+		return events.filter((e) => e.startAt.startsWith(day)).sort((a, b) => a.startAt.localeCompare(b.startAt));
+	}, [events, today]);
+
+	const upcoming = useMemo(() => {
+		const startKey = dayKeyLocal(today);
+		const inFuture = events
+			.filter((e) => {
+				const d = parseISO(e.startAt);
+				// today and beyond
+				return dayKeyLocal(d) >= startKey;
+			})
+			.sort((a, b) => parseISO(a.startAt).getTime() - parseISO(b.startAt).getTime());
+
+		// next ~10 items (MVP)
+		return inFuture.slice(0, 10);
+	}, [events]);
+
+	return (
+		<View style={styles.root}>
+			<ScrollView contentContainerStyle={styles.content}>
+				<View style={styles.headerRow}>
+					<View>
+						<Text style={styles.h1}>Today</Text>
+						<Text style={styles.sub}>{formatDateLong(today)}</Text>
+					</View>
+
+					<Pressable onPress={() => router.push("/modal/create")} style={styles.createBtn}>
+						<Text style={styles.createBtnText}>＋ Create</Text>
+					</Pressable>
+				</View>
+
+				<DayAgenda title="Agenda" events={todaysEvents} onPressEvent={(id) => router.push(`/meeting/${id}`)} emptyText="No events today. Tap Create to add one." />
+
+				<View style={{ marginTop: 22 }}>
+					<Text style={styles.h2}>Upcoming</Text>
+					<View style={{ marginTop: 10 }}>
+						{upcoming.length === 0 ? (
+							<Text style={styles.empty}>Nothing scheduled yet.</Text>
+						) : (
+							upcoming.map((e) => {
+								const d = parseISO(e.startAt);
+								return (
+									<Pressable key={e.id} onPress={() => router.push(`/meeting/${e.id}`)} style={({ pressed }) => [styles.upRow, pressed && { opacity: 0.8 }]}>
+										<View style={{ flex: 1 }}>
+											<Text style={styles.upTitle} numberOfLines={1}>
+												{e.title}
+											</Text>
+											<Text style={styles.upMeta}>
+												{d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} • {d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+											</Text>
+										</View>
+										<Text style={styles.chev}>›</Text>
+									</Pressable>
+								);
+							})
+						)}
+					</View>
+				</View>
+			</ScrollView>
+		</View>
+	);
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+	root: { flex: 1, backgroundColor: "#f8fafc" },
+	content: { padding: 16, paddingBottom: 28 },
+	headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+	h1: { fontSize: 28, fontWeight: "800", color: "#111827" },
+	sub: { marginTop: 4, color: "#6b7280" },
+	createBtn: {
+		backgroundColor: "#111827",
+		paddingHorizontal: 14,
+		paddingVertical: 10,
+		borderRadius: 999,
+	},
+	createBtnText: { color: "white", fontWeight: "700" },
+
+	h2: { fontSize: 18, fontWeight: "800", color: "#111827" },
+	empty: { color: "#6b7280" },
+
+	upRow: {
+		backgroundColor: "white",
+		borderRadius: 14,
+		borderWidth: 1,
+		borderColor: "#e5e7eb",
+		padding: 12,
+		marginBottom: 10,
+		flexDirection: "row",
+		alignItems: "center",
+		gap: 10,
+	},
+	upTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
+	upMeta: { marginTop: 4, color: "#6b7280" },
+	chev: { fontSize: 20, fontWeight: "800", color: "#9ca3af" },
 });
