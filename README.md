@@ -1,50 +1,56 @@
-# Welcome to your Expo app 👋
+# Scheduling App (Expo + Expo Router)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A mobile scheduling app prototype where users can create events (study sessions, meetups, classes) and view them on a calendar.
 
-## Get started
+## Tech Stack
 
-1. Install dependencies
+-   Expo (React Native)
+-   Expo Router (file-based navigation)
+-   Zustand (state management)
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+## Getting Started (Windows)
 
-   ```bash
-   npx expo start
-   ```
+### 1) Install Prerequisites
 
-In the output, you'll find options to open the app in a
+Install these first:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+-   **Node.js (LTS)**
+-   Download **Node.js LTS for Windows** from:  
+    https://nodejs.org
+-   This installs both **Node.js** and **npm**
+-   Restart your computer after installation
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+-   Verify installation:
+    node -v
+    npm -v
 
-## Get a fresh project
+-   **Git for Windows**
+    Download: https://git-scm.com/download/win
 
-When you're ready, run:
+-   **Expo Go (For mobile testing)**
+-   Android: Play Store → “Expo Go”
+-   iOS: App Store → “Expo Go”
 
-```bash
-npm run reset-project
-```
+Optional (only if you want an emulator):
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+-   **Android Studio + Android Emulator**
+-   Install Android Studio
+-   Create an Android Virtual Device (AVD)
+-   Start the emulator before running the app
 
-## Learn more
+---
 
-To learn more about developing your project with Expo, look at the following resources:
+### 2) Download the Project
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+#### Option A: Clone with Git
 
-## Join the community
+Open **PowerShell** and run:
 
-Join our community of developers creating universal apps.
+git clone <PASTE_YOUR_GITHUB_REPO_URL_HERE>
+cd <YOUR_REPO_FOLDER_NAME>
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+npm install
+
+npx start -c
