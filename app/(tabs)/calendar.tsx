@@ -1,38 +1,53 @@
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { CalendarGrid } from "../../components/CalendarGrid";
 import { DayAgenda } from "../../components/DayAgenda";
-import { addMonths, formatDateLong, startOfMonth } from "../../lib/datetime";
+import { addMonths, dayKeyLocal, formatDateLong, isSameDay, parseISO, startOfMonth } from "../../lib/datetime";
 import { useAppStore } from "../../lib/store";
 
+function sortByStart(a: { startAt: string }, b: { startAt: string }) {
+	return parseISO(a.startAt).getTime() - parseISO(b.startAt).getTime();
+}
+
 export default function CalendarScreen() {
+	const events = useAppStore((s) => s.events);
+	const hasEventsOnDay = useAppStore((s) => s.hasEventsOnDay);
+
 	const today = new Date();
 
 	const [month, setMonth] = useState<Date>(() => startOfMonth(today));
 	const [selectedDate, setSelectedDate] = useState<Date>(today);
 
-	const events = useAppStore((s) => s.events);
 	const eventsForSelected = useMemo(() => {
-		return events.filter((e) => e.startAt.startsWith(selectedDate.toISOString().slice(0, 10))).sort((a, b) => a.startAt.localeCompare(b.startAt));
+		const key = dayKeyLocal(selectedDate);
+		return events.filter((ev) => dayKeyLocal(parseISO(ev.startAt)) === key).sort(sortByStart);
 	}, [events, selectedDate]);
-	const hasEventsOnDay = useAppStore((s) => s.hasEventsOnDay);
 
-	// If user flips month, keep selected date sane.
 	const onPrev = () => setMonth((m) => addMonths(m, -1));
 	const onNext = () => setMonth((m) => addMonths(m, 1));
 
-	return (
-		<View style={styles.root}>
-			<ScrollView contentContainerStyle={styles.content}>
-				<CalendarGrid month={month} selectedDate={selectedDate} onSelectDate={setSelectedDate} onPrevMonth={onPrev} onNextMonth={onNext} hasEventsOnDay={hasEventsOnDay} />
+	const isOnToday = isSameDay(selectedDate, today);
 
-				<View style={styles.row}>
-					<View style={{ flex: 1 }}>
-						<Text style={styles.selectedTitle}>{formatDateLong(selectedDate)}</Text>
+	const goToToday = () => {
+		const now = new Date();
+		setSelectedDate(now);
+		setMonth(startOfMonth(now));
+	};
+
+	return (
+		<View className="flex-1 bg-slate-50">
+			<ScrollView contentContainerClassName="p-4 pb-7">
+				<CalendarGrid month={month} selectedDate={selectedDate} onSelectDate={setSelectedDate} onPrevMonth={onPrev} onNextMonth={onNext} hasEventsOnDay={hasEventsOnDay} onToday={goToToday} isOnToday={isOnToday} />
+
+				<View className="mt-4 flex-row items-center gap-2">
+					<View className="flex-1">
+						<View className="flex-row items-center gap-2">
+							<Text className="text-base font-extrabold text-slate-900">{formatDateLong(selectedDate)}</Text>
+						</View>
 					</View>
-					<Pressable onPress={() => router.push("/modal/create")} style={styles.createBtn}>
-						<Text style={styles.createBtnText}>＋</Text>
+					<Pressable onPress={() => router.push("/modal/create")} className="h-10 w-10 items-center justify-center rounded-full bg-slate-900">
+						<Text className="text-white text-lg font-extrabold">＋</Text>
 					</Pressable>
 				</View>
 
@@ -41,19 +56,3 @@ export default function CalendarScreen() {
 		</View>
 	);
 }
-
-const styles = StyleSheet.create({
-	root: { flex: 1, backgroundColor: "#f8fafc" },
-	content: { padding: 16, paddingBottom: 28 },
-	row: { flexDirection: "row", alignItems: "center", marginTop: 14, gap: 10 },
-	selectedTitle: { fontSize: 16, fontWeight: "800", color: "#111827" },
-	createBtn: {
-		width: 38,
-		height: 38,
-		borderRadius: 999,
-		backgroundColor: "#111827",
-		alignItems: "center",
-		justifyContent: "center",
-	},
-	createBtnText: { color: "white", fontSize: 18, fontWeight: "800" },
-});

@@ -8,6 +8,7 @@ type State = {
 	getEventById: (id: string) => Event | undefined;
 	eventsForDay: (day: Date) => Event[];
 	hasEventsOnDay: (day: Date) => boolean;
+	deleteEvent: (id: string) => void;
 };
 
 function makeId() {
@@ -62,5 +63,9 @@ export const useAppStore = create<State>((set, get) => ({
 	hasEventsOnDay: (day) => {
 		const key = dayKeyLocal(day);
 		return get().events.some((ev) => dayKeyLocal(parseISO(ev.startAt)) === key);
+	},
+
+	deleteEvent: (id: string) => {
+		set((s) => ({ events: s.events.filter((ev) => ev.id !== id) }));
 	},
 }));

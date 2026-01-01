@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { endOfMonth, isSameDay, monthTitle, startOfMonth } from "../lib/datetime";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -8,7 +8,6 @@ function buildMonthCells(month: Date) {
 	const start = startOfMonth(month);
 	const end = endOfMonth(month);
 
-	// Leading blanks
 	const leading = start.getDay(); // 0-6
 	const daysInMonth = end.getDate();
 
@@ -16,11 +15,10 @@ function buildMonthCells(month: Date) {
 
 	for (let i = 0; i < leading; i++) cells.push({ date: null });
 
-	for (let day = 1; day <= daysInMonth; day++) {
-		cells.push({ date: new Date(month.getFullYear(), month.getMonth(), day), dayNum: day });
+	for (let d = 1; d <= daysInMonth; d++) {
+		cells.push({ date: new Date(start.getFullYear(), start.getMonth(), d), dayNum: d });
 	}
 
-	// Trailing blanks to fill last week
 	while (cells.length % 7 !== 0) cells.push({ date: null });
 
 	return cells;
@@ -33,6 +31,8 @@ export function CalendarGrid({
 	onPrevMonth,
 	onNextMonth,
 	hasEventsOnDay,
+	onToday,
+	isOnToday = false,
 }: {
 	month: Date;
 	selectedDate: Date;
@@ -40,50 +40,73 @@ export function CalendarGrid({
 	onPrevMonth: () => void;
 	onNextMonth: () => void;
 	hasEventsOnDay: (d: Date) => boolean;
+	onToday?: () => void;
+	isOnToday?: boolean;
 }) {
-	const today = new Date();
-
+	// Keep "today" stable for cell highlighting
+	const today = useMemo(() => new Date(), []);
 	const cells = useMemo(() => buildMonthCells(month), [month]);
 
 	return (
-		<View style={styles.card}>
-			<View style={styles.header}>
-				<Pressable onPress={onPrevMonth} hitSlop={10} style={styles.navBtn}>
-					<Text style={styles.navText}>‹</Text>
+		<View className="rounded-2xl border border-slate-200 bg-white p-3">
+			{/* Header */}
+			<View className="flex-row items-center justify-between mb-2">
+				<Pressable onPress={onPrevMonth} hitSlop={10} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100" style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+					<Text className="text-xl font-extrabold text-slate-900 -mt-[2px]">‹</Text>
 				</Pressable>
 
-				<Text style={styles.title}>{monthTitle(month)}</Text>
+				{/* Center area between arrows */}
+				<View className="flex-1 items-center justify-center">
+					<Text className="text-base font-extrabold text-slate-900">{monthTitle(month)}</Text>
 
-				<Pressable onPress={onNextMonth} hitSlop={10} style={styles.navBtn}>
-					<Text style={styles.navText}>›</Text>
+					{onToday ? (
+						<Pressable
+							onPress={onToday}
+							disabled={isOnToday}
+							className={["mt-1 rounded-full border px-3 py-1", isOnToday ? "bg-slate-900 border-slate-900 opacity-90" : "bg-white border-slate-200"].join(" ")}
+							style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
+						>
+							<Text className={["text-xs font-extrabold", isOnToday ? "text-white" : "text-slate-900"].join(" ")}>Today</Text>
+						</Pressable>
+					) : null}
+				</View>
+
+				<Pressable onPress={onNextMonth} hitSlop={10} className="h-9 w-9 items-center justify-center rounded-full bg-slate-100" style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}>
+					<Text className="text-xl font-extrabold text-slate-900 -mt-[2px]">›</Text>
 				</Pressable>
 			</View>
 
-			<View style={styles.weekRow}>
+			{/* Weekday labels */}
+			<View className="flex-row justify-between px-1 mb-2">
 				{WEEKDAYS.map((w) => (
-					<Text key={w} style={styles.weekday}>
+					<Text key={w} className="w-[34px] text-center text-xs font-bold text-slate-500">
 						{w}
 					</Text>
 				))}
 			</View>
 
-			<View style={styles.grid}>
+			{/* Grid */}
+			<View className="flex-row flex-wrap">
 				{cells.map((c, idx) => {
 					if (!c.date) {
-						return <View key={idx} style={styles.cell} />;
+						return <View key={idx} className="w-[14.2857%] items-center py-2" />;
 					}
 
 					const isSelected = isSameDay(c.date, selectedDate);
-					const isToday = isSameDay(c.date, today);
+					const isTodayCell = isSameDay(c.date, today);
 					const hasDot = hasEventsOnDay(c.date);
 
+					const pillClass = ["h-8 w-8 items-center justify-center rounded-full", isSelected ? "bg-slate-900" : "bg-slate-100", !isSelected && isTodayCell ? "border-2 border-slate-900 bg-white" : ""].join(" ");
+
+					const dayTextClass = ["text-sm font-semibold", isSelected ? "text-white" : "text-slate-900"].join(" ");
+
 					return (
-						<Pressable key={idx} onPress={() => onSelectDate(c.date!)} style={({ pressed }) => [styles.cell, pressed && { opacity: 0.75 }]}>
-							<View style={[styles.dayPill, isSelected && styles.selectedPill, !isSelected && isToday && styles.todayPill]}>
-								<Text style={[styles.dayText, isSelected && styles.selectedText]}>{c.dayNum}</Text>
+						<Pressable key={idx} onPress={() => onSelectDate(c.date!)} className="w-[14.2857%] items-center py-2" style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]}>
+							<View className={pillClass}>
+								<Text className={dayTextClass}>{c.dayNum}</Text>
 							</View>
 
-							{hasDot && <View style={styles.dot} />}
+							{hasDot ? <View className="mt-1 h-1.5 w-1.5 rounded-full bg-slate-900" /> : null}
 						</Pressable>
 					);
 				})}
@@ -91,66 +114,3 @@ export function CalendarGrid({
 		</View>
 	);
 }
-
-const styles = StyleSheet.create({
-	card: {
-		backgroundColor: "white",
-		borderRadius: 16,
-		padding: 12,
-		borderWidth: 1,
-		borderColor: "#e5e7eb",
-	},
-	header: {
-		flexDirection: "row",
-		alignItems: "center",
-		justifyContent: "space-between",
-		paddingHorizontal: 6,
-		paddingBottom: 8,
-	},
-	title: { fontSize: 16, fontWeight: "700", color: "#111827" },
-	navBtn: { padding: 6 },
-	navText: { fontSize: 20, fontWeight: "700", color: "#111827" },
-
-	weekRow: {
-		flexDirection: "row",
-		justifyContent: "space-between",
-		paddingHorizontal: 4,
-		marginBottom: 6,
-	},
-	weekday: { width: "14.2857%", textAlign: "center", fontSize: 12, color: "#6b7280" },
-
-	grid: {
-		flexDirection: "row",
-		flexWrap: "wrap",
-	},
-	cell: {
-		width: "14.2857%",
-		paddingVertical: 8,
-		alignItems: "center",
-		justifyContent: "center",
-		minHeight: 44,
-	},
-	dayPill: {
-		width: 30,
-		height: 30,
-		borderRadius: 999,
-		alignItems: "center",
-		justifyContent: "center",
-	},
-	todayPill: {
-		borderWidth: 1,
-		borderColor: "#111827",
-	},
-	selectedPill: {
-		backgroundColor: "#111827",
-	},
-	dayText: { fontSize: 14, color: "#111827", fontWeight: "600" },
-	selectedText: { color: "white" },
-	dot: {
-		width: 6,
-		height: 6,
-		borderRadius: 999,
-		marginTop: 4,
-		backgroundColor: "#111827",
-	},
-});

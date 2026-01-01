@@ -11,6 +11,20 @@ const TYPES: { type: EventType; label: string }[] = [
 	{ type: "class", label: "Class" },
 ];
 
+// helper: "YYYY-MM-DDTHH:mm"
+function toLocalInputValue(d: Date) {
+	const pad = (n: number) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromLocalInputValue(s: string) {
+	// Parse strictly as *local time* (avoid browser timezone quirks)
+	const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+	if (!m) return null;
+	const [, y, mo, d, h, mi] = m;
+	return new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi));
+}
+
 export default function CreateModal() {
 	const addEvent = useAppStore((s) => s.addEvent);
 
@@ -60,15 +74,57 @@ export default function CreateModal() {
 				})}
 			</View>
 
-			<Text style={styles.label}>Start</Text>
-			<View style={styles.pickerRow}>
-				<DateTimePicker value={start} mode="datetime" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(_, d) => d && setStart(d)} />
-			</View>
+			<Text className="text-xs font-extrabold uppercase text-slate-500 mt-3">Start</Text>
 
-			<Text style={styles.label}>End</Text>
-			<View style={styles.pickerRow}>
-				<DateTimePicker value={end} mode="datetime" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(_, d) => d && setEnd(d)} />
-			</View>
+			{Platform.OS === "web" ? (
+				<input
+					value={toLocalInputValue(start)}
+					type="datetime-local"
+					onChange={(e) => {
+						const d = fromLocalInputValue((e.target as HTMLInputElement).value);
+						if (d) setStart(d);
+					}}
+					style={{
+						marginTop: 8,
+						width: "100%",
+						borderRadius: 16,
+						border: "1px solid #e5e7eb",
+						padding: 12,
+						fontSize: 16,
+						backgroundColor: "white",
+					}}
+				/>
+			) : (
+				<View className="mt-2 rounded-2xl border border-slate-200 bg-white p-2">
+					<DateTimePicker value={start} mode="datetime" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(_, d) => d && setStart(d)} />
+				</View>
+			)}
+
+			<Text className="text-xs font-extrabold uppercase text-slate-500 mt-3">End</Text>
+
+			{Platform.OS === "web" ? (
+				<input
+					value={toLocalInputValue(start)}
+					type="datetime-local"
+					onChange={(e) => {
+						const d = fromLocalInputValue((e.target as HTMLInputElement).value);
+						if (d) setEnd(d);
+					}}
+					style={{
+						marginTop: 8,
+						width: "100%",
+						borderRadius: 16,
+						border: "1px solid #e5e7eb",
+						padding: 12,
+						fontSize: 16,
+						backgroundColor: "white",
+					}}
+				/>
+			) : (
+				<View className="mt-2 rounded-2xl border border-slate-200 bg-white p-2">
+					<DateTimePicker value={end} mode="datetime" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(_, d) => d && setEnd(d)} />
+				</View>
+			)}
 
 			<Text style={styles.label}>Location (optional)</Text>
 			<TextInput value={location} onChangeText={setLocation} placeholder="Library, Zoom, etc." style={styles.input} />
