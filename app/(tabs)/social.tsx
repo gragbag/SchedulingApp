@@ -1307,48 +1307,136 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
     }
   }, [showArchive, canSelectBatch]);
 
-  return (
-    <View style={styles.screen}>
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <View style={styles.flex1}>
-            <Text style={styles.h1}>
-              {isHistory ? "History" : isSentRoute ? "Sent" : "Invites"}
-            </Text>
-            <Text style={styles.headerSubtitle}>{countText}</Text>
-          </View>
+  const tabsAndFilters = (
+    <>
+      {/* Tabs */}
+      <View style={[styles.mt16, styles.rowGap8]}>
+        <Pressable
+          onPress={() => setActiveTab("groups")}
+          style={[styles.tabBtn, activeTab === "groups" ? styles.tabActive : styles.tabInactive]}
+        >
+          <Text style={[styles.tabText, activeTab === "groups" ? styles.textWhite : styles.textSlate900]}>
+            📚 Group Invites {groupTabCount > 0 ? `(${groupTabCount})` : ""}
+          </Text>
+        </Pressable>
 
-          <View style={styles.rowGap8}>
-            {!isHistory && !isAnsweredRoute && !isSentRoute && (
-              <Pressable
-                onPress={() => router.push("/history/social-answered")}
-                style={[styles.pillBtn, styles.pillInactive]}
-              >
-                <Text style={[styles.pillBtnText, styles.textSlate700]}>Edit</Text>
-              </Pressable>
-            )}
+        <Pressable
+          onPress={() => setActiveTab("friends")}
+          style={[styles.tabBtn, activeTab === "friends" ? styles.tabActive : styles.tabInactive]}
+        >
+          <Text style={[styles.tabText, activeTab === "friends" ? styles.textWhite : styles.textSlate900]}>
+            👥 Friend Invites {friendTabCount > 0 ? `(${friendTabCount})` : ""}
+          </Text>
+        </Pressable>
+      </View>
 
-            {!isHistory && !isAnsweredRoute && !isSentRoute && (
+      {/* Filter + Select */}
+      <View style={styles.mt16}>
+        <View style={styles.filterStack}>
+          <View style={styles.filterRow}>
+            <Pressable
+              onPress={() => setFilterType("all")}
+              style={[styles.filterBtn, filterType === "all" ? styles.filterActive : styles.filterInactive]}
+            >
+              <Text style={[styles.filterText, filterType === "all" ? styles.textWhite : styles.textSlate700]}>
+                All ({activeTotalCount})
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setFilterType("social")}
+              style={[styles.filterBtn, filterType === "social" ? styles.filterActive : styles.filterInactive]}
+            >
+              <Text style={[styles.filterText, filterType === "social" ? styles.textWhite : styles.textSlate700]}>
+                🎉 Social ({activeSocialCount})
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setFilterType("calendar")}
+              style={[styles.filterBtn, filterType === "calendar" ? styles.filterActive : styles.filterInactive]}
+            >
+              <Text style={[styles.filterText, filterType === "calendar" ? styles.textWhite : styles.textSlate700]}>
+                📅 Calendar ({activeCalendarCount})
+              </Text>
+            </Pressable>
+
+            {isHistory && (
               <Pressable
                 onPress={() => router.push("/history/social-sent")}
-                style={[styles.pillBtn, styles.pillInactive]}
+                style={[styles.filterBtn, styles.filterInactive]}
               >
-                <Text style={[styles.pillBtnText, styles.textSlate700]}>Sent</Text>
+                <Text style={[styles.filterText, styles.textSlate700]}>Sent</Text>
               </Pressable>
             )}
 
-            {!isHistory && !isAnsweredRoute && !isSentRoute && (
-              <Pressable onPress={() => router.push("/modal/social-create")} style={[styles.pillBtn, styles.pillDark]}>
-                <Text style={[styles.pillBtnText, styles.textWhite]}>+ Invite</Text>
+            {canSelectBatch && (
+              <Pressable
+                onPress={toggleBatchMode}
+                style={[
+                  styles.filterSelectBtn,
+                  batchMode ? styles.selectActive : styles.selectInactive,
+                ]}
+              >
+                <Text style={[styles.filterSelectText, batchMode ? styles.textWhite : styles.textBlue700]}>
+                  {batchMode ? "Done" : "Select"}
+                </Text>
               </Pressable>
             )}
           </View>
         </View>
+      </View>
+    </>
+  );
 
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.container}>
         {isSentRoute ? (
-          <View style={[styles.mt16, styles.flex1MinHeight0]}>
-            <ScrollView style={styles.flex1MinHeight0} contentContainerStyle={styles.pb40}>
+          <View style={styles.flex1MinHeight0}>
+            <ScrollView
+              style={styles.flex1MinHeight0}
+              contentContainerStyle={styles.pb40}
+            >
+              <View style={styles.headerScrollWrap} collapsable={false}>
+                {/* Header */}
+                <View style={styles.headerRow}>
+                  <View style={styles.flex1}>
+                    <Text style={styles.h1}>
+                      {isHistory ? "History" : isSentRoute ? "Sent" : "Invites"}
+                    </Text>
+                    <Text style={styles.headerSubtitle}>{countText}</Text>
+                  </View>
+
+                  <View style={styles.rowGap8}>
+                    {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                      <Pressable
+                        onPress={() => router.push("/history/social-answered")}
+                        style={[styles.pillBtn, styles.pillInactive]}
+                      >
+                        <Text style={[styles.pillBtnText, styles.textSlate700]}>Edit</Text>
+                      </Pressable>
+                    )}
+
+                    {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                      <Pressable
+                        onPress={() => router.push("/history/social-sent")}
+                        style={[styles.pillBtn, styles.pillInactive]}
+                      >
+                        <Text style={[styles.pillBtnText, styles.textSlate700]}>Sent</Text>
+                      </Pressable>
+                    )}
+
+                    {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                      <Pressable onPress={() => router.push("/modal/social-create")} style={[styles.pillBtn, styles.pillDark]}>
+                        <Text style={[styles.pillBtnText, styles.textWhite]}>+ Invite</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
+              </View>
+
               <View style={styles.mb24}>
                 <Text style={styles.sectionHeader}>
                   Sent Invites {sentInvites.length > 0 ? `(${sentInvites.length})` : ""}
@@ -1392,94 +1480,55 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
             </ScrollView>
           </View>
         ) : (
-          <>
-            {/* Tabs */}
-            <View style={[styles.mt16, styles.rowGap8]}>
-          <Pressable
-            onPress={() => setActiveTab("groups")}
-            style={[styles.tabBtn, activeTab === "groups" ? styles.tabActive : styles.tabInactive]}
-          >
-              <Text style={[styles.tabText, activeTab === "groups" ? styles.textWhite : styles.textSlate900]}>
-                📚 Group Invites{" "}
-              {groupTabCount > 0 ? `(${groupTabCount})` : ""}
-            </Text>
-          </Pressable>
+          <View style={styles.flex1MinHeight0}>
+            <ScrollView
+              style={styles.flex1MinHeight0}
+              contentContainerStyle={styles.pb40}
+              stickyHeaderIndices={[1]}
+            >
+              <View style={styles.headerScrollWrap} collapsable={false}>
+                {/* Header */}
+                <View style={styles.headerRow}>
+                  <View style={styles.flex1}>
+                    <Text style={styles.h1}>
+                      {isHistory ? "History" : isSentRoute ? "Sent" : "Invites"}
+                    </Text>
+                    <Text style={styles.headerSubtitle}>{countText}</Text>
+                  </View>
 
-          <Pressable
-            onPress={() => setActiveTab("friends")}
-            style={[styles.tabBtn, activeTab === "friends" ? styles.tabActive : styles.tabInactive]}
-          >
-              <Text style={[styles.tabText, activeTab === "friends" ? styles.textWhite : styles.textSlate900]}>
-                👥 Friend Invites{" "}
-              {friendTabCount > 0 ? `(${friendTabCount})` : ""}
-            </Text>
-          </Pressable>
-        </View>
+                  <View style={styles.rowGap8}>
+                    {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                      <Pressable
+                        onPress={() => router.push("/history/social-answered")}
+                        style={[styles.pillBtn, styles.pillInactive]}
+                      >
+                        <Text style={[styles.pillBtnText, styles.textSlate700]}>Edit</Text>
+                      </Pressable>
+                    )}
 
-        {/* Filter + Select */}
-        <View style={[styles.mt16, styles.flex1MinHeight0]}>
-          <View style={styles.filterStack}>
-            <View style={styles.filterRow}>
-              <Pressable
-                onPress={() => setFilterType("all")}
-                style={[styles.filterBtn, filterType === "all" ? styles.filterActive : styles.filterInactive]}
-              >
-              <Text style={[styles.filterText, filterType === "all" ? styles.textWhite : styles.textSlate700]}>
-                All ({activeTotalCount})
-              </Text>
-            </Pressable>
+                    {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                      <Pressable
+                        onPress={() => router.push("/history/social-sent")}
+                        style={[styles.pillBtn, styles.pillInactive]}
+                      >
+                        <Text style={[styles.pillBtnText, styles.textSlate700]}>Sent</Text>
+                      </Pressable>
+                    )}
 
-              <Pressable
-                onPress={() => setFilterType("social")}
-                style={[styles.filterBtn, filterType === "social" ? styles.filterActive : styles.filterInactive]}
-              >
-              <Text style={[styles.filterText, filterType === "social" ? styles.textWhite : styles.textSlate700]}>
-                🎉 Social ({activeSocialCount})
-              </Text>
-            </Pressable>
-
-              <Pressable
-                onPress={() => setFilterType("calendar")}
-                style={[styles.filterBtn, filterType === "calendar" ? styles.filterActive : styles.filterInactive]}
-              >
-              <Text style={[styles.filterText, filterType === "calendar" ? styles.textWhite : styles.textSlate700]}>
-                📅 Calendar ({activeCalendarCount})
-              </Text>
-            </Pressable>
-
-              {!isHistory && !isAnsweredRoute && !isSentRoute && (
-                <Pressable
-                  onPress={() => router.push("/history/social-expired")}
-                  style={[styles.filterBtn, styles.filterInactive]}
-                >
-                  <Text style={[styles.filterText, styles.textSlate700]}>History</Text>
-                </Pressable>
-              )}
-
-              {isHistory && (
-                <Pressable
-                  onPress={() => router.push("/history/social-sent")}
-                  style={[styles.filterBtn, styles.filterInactive]}
-                >
-                  <Text style={[styles.filterText, styles.textSlate700]}>Sent</Text>
-                </Pressable>
-              )}
-            </View>
-
-            {canSelectBatch && (
-              <View style={styles.selectRow}>
-                <Pressable
-                  onPress={toggleBatchMode}
-                  style={[styles.selectBtn, batchMode ? styles.selectActive : styles.selectInactive]}
-                >
-                <Text style={[styles.selectText, batchMode ? styles.textWhite : styles.textBlue700]}>
-                  {batchMode ? "✓ Done" : "Select"}
-                </Text>
-                </Pressable>
+                    {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                      <Pressable onPress={() => router.push("/modal/social-create")} style={[styles.pillBtn, styles.pillDark]}>
+                        <Text style={[styles.pillBtnText, styles.textWhite]}>+ Invite</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
               </View>
-            )}
-          </View>
 
+              <View style={styles.stickyHeaderWrap} collapsable={false}>
+                {tabsAndFilters}
+              </View>
+
+              <View style={styles.contentWrap}>
           {/* Batch Bars */}
           {batchMode && selectedInviteIds.length > 0 && (
             <View style={styles.batchBar}>
@@ -1518,7 +1567,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
           )}
 
           {/* Content */}
-          <ScrollView style={[styles.mt16, styles.flex1MinHeight0]} contentContainerStyle={styles.pb40}>
+          <View style={styles.mt16}>
             {activeTab === "groups" ? (
               <>
                 {(filterType === "all" || filterType === "social") && (
@@ -1694,10 +1743,11 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
                 </Text>
               </Pressable>
             )}
-          </ScrollView>
-        </View>
-        </>
-      )}
+          </View>
+              </View>
+            </ScrollView>
+          </View>
+        )}
 
         {/* Invite Detail Modal (selectedInvite) */}
         {selectedInvite && (
@@ -2035,6 +2085,9 @@ const createScaledStyles = <T extends StyleSheet.NamedStyles<T>>(styleMap: T): T
 const styles = createScaledStyles({
   screen: { flex: 1, backgroundColor: "#f8fafc" }, // slate-50
   container: { flex: 1, maxWidth: 720, alignSelf: "center", width: "100%", padding: 16, paddingBottom: 24 },
+  headerScrollWrap: { paddingBottom: 8 },
+  stickyHeaderWrap: { backgroundColor: "#f8fafc", paddingBottom: 8, zIndex: 10 },
+  contentWrap: { paddingTop: 16 },
 
   /* layout helpers */
   flex1: { flex: 1 },
@@ -2137,6 +2190,8 @@ const styles = createScaledStyles({
   filterActive: { backgroundColor: "#0f172a" },
   filterInactive: { backgroundColor: "#f1f5f9" },
   filterText: { fontSize: 12, fontWeight: "700" },
+  filterSelectBtn: { marginLeft: "auto", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  filterSelectText: { fontSize: 12, fontWeight: "800" },
   selectText: { fontSize: 13, fontWeight: "700" },
   selectRow: { flexDirection: "row", justifyContent: "flex-end" },
   selectBtn: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, minWidth: 120, alignItems: "center", justifyContent: "center" },
