@@ -96,7 +96,13 @@ export default function CreateModal() {
 				/>
 			) : (
 				<View className="mt-2 rounded-2xl border border-slate-200 bg-white p-2">
-					<DateTimePicker value={start} mode="datetime" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(_, d) => d && setStart(d)} />
+					<DateTimePicker
+						value={start}
+						mode="datetime"
+						display={Platform.OS === "ios" ? "spinner" : "default"}
+						onChange={(_, d) => d && setStart(d)}
+						style={styles.pickerWheel}
+					/>
 				</View>
 			)}
 
@@ -122,7 +128,13 @@ export default function CreateModal() {
 				/>
 			) : (
 				<View className="mt-2 rounded-2xl border border-slate-200 bg-white p-2">
-					<DateTimePicker value={end} mode="datetime" display={Platform.OS === "ios" ? "spinner" : "default"} onChange={(_, d) => d && setEnd(d)} />
+					<DateTimePicker
+						value={end}
+						mode="datetime"
+						display={Platform.OS === "ios" ? "spinner" : "default"}
+						onChange={(_, d) => d && setEnd(d)}
+						style={styles.pickerWheel}
+					/>
 				</View>
 			)}
 
@@ -183,6 +195,7 @@ const styles = StyleSheet.create({
 		borderRadius: 14,
 		padding: 6,
 	},
+	pickerWheel: { height: 180 },
 	saveBtn: {
 		marginTop: 10,
 		backgroundColor: "#111827",

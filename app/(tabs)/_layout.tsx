@@ -13,6 +13,7 @@ export default function TabsLayout() {
 				}}
 			/>
 			<Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
+			<Tabs.Screen name="social" options={{ title: "Social" }} />
 		</Tabs>
 	);
 }
