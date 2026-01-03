@@ -291,9 +291,9 @@ function InviteCard({
           <Text style={styles.textSlate600}>📍 {invite.location}</Text>
         </View>
         <View style={[styles.mt4, styles.rowGap8]}>
-          <Text style={styles.textSlate600}>
-            🕒 {formatDateLong(start)} at {formatTime(start)}
-          </Text>
+            <Text style={styles.textSlate600}>
+              🕒 {formatDateLong(start)} at {formatTime(start)}
+            </Text>
         </View>
 
         <View style={[styles.mt12, styles.rowGap12]}>
@@ -458,9 +458,9 @@ function CalendarEventCard({
 
       <View style={styles.spaceY6}>
         <Text style={[styles.textSm, styles.textSlate700]}>📍 {event.location}</Text>
-        <Text style={[styles.textSm, styles.textSlate700]}>
-          🕒 {formatDateLong(start)} at {formatTime(start)}
-        </Text>
+          <Text style={[styles.textSm, styles.textSlate700]}>
+            🕒 {formatDateLong(start)} at {formatTime(start)}
+          </Text>
 
         {!!noteText && (
           <View>
@@ -507,8 +507,8 @@ function CalendarEventCard({
         <View style={styles.mt12}>
           {!!event.reminderSettings && (
             <View style={styles.reminderBox}>
-              <Text style={[styles.textXs, styles.fontBold, styles.textSlate600]}>
-                🔔 Reminders:{" "}
+                <Text style={[styles.textXs, styles.fontBold, styles.textSlate600]}>
+                  🔔 Reminders:{" "}
                 {event.reminderSettings.times.length === 0
                   ? "None"
                   : event.reminderSettings.times
@@ -739,7 +739,7 @@ function RSVPToast({
         <View style={[styles.toastPill, bg]}>
           <Text style={styles.toastText}>{toast.text}</Text>
           <Pressable onPress={onViewAnswered} style={styles.toastLinkBtn}>
-            <Text style={styles.toastLinkText}>View in Answered</Text>
+            <Text style={styles.toastLinkText}>View in Edit</Text>
           </Pressable>
           <Pressable onPress={onDismiss} style={styles.toastCloseBtn}>
             <Text style={styles.toastCloseText}>×</Text>
@@ -928,10 +928,12 @@ function GroupDetailsModal({
 
 /* ----------------------------- Main Screen ----------------------------- */
 
-export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}) {
+export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "answered" | "sent" } = {}) {
   const isHistory = modeOverride === "history";
+  const isAnsweredRoute = modeOverride === "answered";
+  const isSentRoute = modeOverride === "sent";
   const [activeTab, setActiveTab] = useState<"groups" | "friends">("groups");
-  const [showArchive, setShowArchive] = useState(!isHistory);
+  const showArchive = isAnsweredRoute;
   const [filterType, setFilterType] = useState<"all" | "social" | "calendar">("all");
   const [batchMode, setBatchMode] = useState(false);
   const [selectedInviteIds, setSelectedInviteIds] = useState<string[]>([]);
@@ -964,12 +966,12 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
   );
 
   useEffect(() => {
-    if (isHistory || !lastCreated) return;
-    setShowArchive(false);
+    if (isHistory || isAnsweredRoute || isSentRoute || !lastCreated) return;
     setFilterType(lastCreated.eventType === "social" ? "social" : "calendar");
     setActiveTab(lastCreated.sendTo === "group" ? "groups" : "friends");
+    router.push("/history/social-sent");
     clearLastCreated();
-  }, [isHistory, lastCreated, clearLastCreated]);
+  }, [isHistory, isAnsweredRoute, isSentRoute, lastCreated, clearLastCreated]);
 
   const handleGroupRSVP = (id: string, status: RSVPValue) => {
     if (!status) {
@@ -1062,12 +1064,12 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
 
   const handleRemoveFromCalendar = (eventId: string, isGroup: boolean) => {
     updateCalendarEvent(eventId, isGroup, { acceptStatus: "declined", reminderSettings: null });
-    Alert.alert("Declined", "Event declined. Moved to archive.");
+    Alert.alert("Declined", "Event marked as declined.");
   };
 
   const handleDeclineCalendarEvent = (eventId: string, isGroup: boolean) => {
     updateCalendarEvent(eventId, isGroup, { acceptStatus: "declined" });
-    Alert.alert("Declined", "Event declined. Moved to archive.");
+    Alert.alert("Declined", "Event marked as declined.");
   };
 
   const handleRestoreFromArchive = (eventId: string, isGroup: boolean) => {
@@ -1098,6 +1100,12 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
   const answeredGroupCalendar = groupCalendarEvents.filter((evt) => !!evt.acceptStatus);
   const answeredFriendCalendar = friendCalendarEvents.filter((evt) => !!evt.acceptStatus);
 
+  const sentGroupInvites = groupInvites.filter((inv) => inv.organizer === "You");
+  const sentFriendInvites = friendInvites.filter((inv) => inv.organizer === "You");
+  const sentGroupCalendar = groupCalendarEvents.filter((evt) => evt.creator === "You");
+  const sentFriendCalendar = friendCalendarEvents.filter((evt) => evt.creator === "You");
+  const sentInvites = [...sentGroupInvites, ...sentFriendInvites];
+
   const now = new Date();
   const isExpired = (iso: string) => new Date(iso).getTime() < now.getTime();
 
@@ -1108,21 +1116,29 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
 
   const groupSocialCount = isHistory
     ? expiredGroupInvites.length
+    : isSentRoute
+    ? sentGroupInvites.length
     : showArchive
     ? answeredGroupInvites.length
     : pendingGroupInvites.length;
   const groupCalendarCount = isHistory
     ? expiredGroupCalendar.length
+    : isSentRoute
+    ? sentGroupCalendar.length
     : showArchive
     ? answeredGroupCalendar.length
     : pendingGroupCalendar.length;
   const friendSocialCount = isHistory
     ? expiredFriendInvites.length
+    : isSentRoute
+    ? sentFriendInvites.length
     : showArchive
     ? answeredFriendInvites.length
     : pendingFriendInvites.length;
   const friendCalendarCount = isHistory
     ? expiredFriendCalendar.length
+    : isSentRoute
+    ? sentFriendCalendar.length
     : showArchive
     ? answeredFriendCalendar.length
     : pendingFriendCalendar.length;
@@ -1135,21 +1151,29 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
 
   const groupInvitesToShow = isHistory
     ? expiredGroupInvites
+    : isSentRoute
+    ? sentGroupInvites
     : showArchive
     ? answeredGroupInvites
     : pendingGroupInvites;
   const friendInvitesToShow = isHistory
     ? expiredFriendInvites
+    : isSentRoute
+    ? sentFriendInvites
     : showArchive
     ? answeredFriendInvites
     : pendingFriendInvites;
   const groupCalendarToShow = isHistory
     ? expiredGroupCalendar
+    : isSentRoute
+    ? sentGroupCalendar
     : showArchive
     ? answeredGroupCalendar
     : pendingGroupCalendar;
   const friendCalendarToShow = isHistory
     ? expiredFriendCalendar
+    : isSentRoute
+    ? sentFriendCalendar
     : showArchive
     ? answeredFriendCalendar
     : pendingFriendCalendar;
@@ -1165,6 +1189,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
 
   const canSelectBatch =
     !isHistory &&
+    !isSentRoute &&
     !showArchive &&
     (filterType === "all"
       ? pendingTotal > 0
@@ -1193,39 +1218,86 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
     expiredFriendInvites.length +
     expiredGroupCalendar.length +
     expiredFriendCalendar.length;
+  const sentTotal = sentInvites.length;
 
   const countText = isHistory
     ? `${historyTotal} expired invitations`
+    : isSentRoute
+    ? `${sentTotal} sent invitations`
     : showArchive
     ? `${answeredGroupInvites.length + answeredFriendInvites.length + answeredGroupCalendar.length + answeredFriendCalendar.length
-      } answered invitations`
+      } responses`
     : `${pendingGroupInvites.length + pendingFriendInvites.length + pendingGroupCalendar.length + pendingFriendCalendar.length
       } pending invitations`;
 
   const socialEmptyTitle = isHistory
     ? "No expired invites"
+    : isSentRoute
+    ? "No sent invites"
     : showArchive
-    ? "No answered invites"
+    ? "No responses yet"
     : "No pending invites";
   const socialEmptyDesc = isHistory
     ? "Expired invites will appear here."
+    : isSentRoute
+    ? "Invites you send will appear here."
     : showArchive
-    ? "Invites you respond to will appear here."
-    : "You're all caught up! Check answered tab for past RSVPs.";
-  const socialEmptyEmoji = isHistory ? "🕘" : showArchive ? "✅" : "📚";
+    ? "Responses will appear here."
+    : "You're all caught up! Check edit for past RSVPs.";
+  const socialEmptyEmoji = isHistory ? "🕘" : isSentRoute ? "📤" : showArchive ? "✅" : "📚";
 
   const calendarEmptyTitle = isHistory
     ? "No expired events"
+    : isSentRoute
+    ? "No sent events"
     : showArchive
-    ? "No answered events"
+    ? "No responses yet"
     : "No pending events";
   const calendarEmptyDesc = isHistory
     ? "Expired events will appear here."
+    : isSentRoute
+    ? "Events you send will appear here."
     : showArchive
-    ? "Calendar events you accept will appear here."
+    ? "Responses will appear here."
     : "You're all caught up!";
-  const calendarEmptyEmoji = isHistory ? "🕘" : showArchive ? "✅" : "📅";
-  const statusLabel = isHistory ? "expired" : showArchive ? "answered" : "pending";
+  const calendarEmptyEmoji = isHistory ? "🕘" : isSentRoute ? "📤" : showArchive ? "✅" : "📅";
+  const statusLabel = isHistory ? "expired" : isSentRoute ? "sent" : showArchive ? "responses" : "pending";
+  const selectedInviteStats = selectedInvite
+    ? (() => {
+        const totalInvited = selectedInvite.totalInvited;
+        const going = selectedInvite.attendees.filter((a) => a.status === "yes").length;
+        const maybe = selectedInvite.attendees.filter((a) => a.status === "maybe").length;
+        const no = selectedInvite.attendees.filter((a) => a.status === "no").length;
+        const responded = going + maybe + no;
+        const pending = Math.max(totalInvited - responded, 0);
+        const responseRate = totalInvited ? Math.round((responded / totalInvited) * 100) : 0;
+        const friendCount = selectedInvite.attendees.filter((a) => a.isFriend).length;
+        const knownCount = selectedInvite.attendees.length;
+        const friendRate = knownCount ? Math.round((friendCount / knownCount) * 100) : 0;
+        const startAt = new Date(selectedInvite.startAt);
+        const daysToStart = Math.ceil((startAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        const daysLabel =
+          daysToStart <= 0 ? "Today" : `${daysToStart} day${daysToStart === 1 ? "" : "s"}`;
+        const momentum = responseRate >= 70 ? "Hot" : responseRate >= 40 ? "Building" : "Early";
+        const estimatedTurnout = going + Math.round(maybe * 0.6);
+
+        return {
+          totalInvited,
+          going,
+          maybe,
+          no,
+          responded,
+          pending,
+          responseRate,
+          friendCount,
+          friendRate,
+          daysLabel,
+          startAt,
+          momentum,
+          estimatedTurnout,
+        };
+      })()
+    : null;
 
   useEffect(() => {
     if (showArchive || !canSelectBatch) {
@@ -1241,23 +1313,32 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
         {/* Header */}
         <View style={styles.headerRow}>
           <View style={styles.flex1}>
-            <Text style={styles.h1}>{isHistory ? "History" : "Invites"}</Text>
+            <Text style={styles.h1}>
+              {isHistory ? "History" : isSentRoute ? "Sent" : "Invites"}
+            </Text>
             <Text style={styles.headerSubtitle}>{countText}</Text>
           </View>
 
           <View style={styles.rowGap8}>
-            {!isHistory && (
+            {!isHistory && !isAnsweredRoute && !isSentRoute && (
               <Pressable
-                onPress={() => setShowArchive((v) => !v)}
-                style={[styles.pillBtn, showArchive ? styles.pillActiveBlue : styles.pillInactive]}
+                onPress={() => router.push("/history/social-answered")}
+                style={[styles.pillBtn, styles.pillInactive]}
               >
-                <Text style={[styles.pillBtnText, showArchive ? styles.textWhite : styles.textSlate700]}>
-                  {showArchive ? "✅ Answered" : "📋 Pending"}
-                </Text>
+                <Text style={[styles.pillBtnText, styles.textSlate700]}>Edit</Text>
               </Pressable>
             )}
 
-            {!isHistory && (
+            {!isHistory && !isAnsweredRoute && !isSentRoute && (
+              <Pressable
+                onPress={() => router.push("/history/social-sent")}
+                style={[styles.pillBtn, styles.pillInactive]}
+              >
+                <Text style={[styles.pillBtnText, styles.textSlate700]}>Sent</Text>
+              </Pressable>
+            )}
+
+            {!isHistory && !isAnsweredRoute && !isSentRoute && (
               <Pressable onPress={() => router.push("/modal/social-create")} style={[styles.pillBtn, styles.pillDark]}>
                 <Text style={[styles.pillBtnText, styles.textWhite]}>+ Invite</Text>
               </Pressable>
@@ -1265,14 +1346,61 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
           </View>
         </View>
 
-        {/* Tabs */}
-        <View style={[styles.mt16, styles.rowGap8]}>
+        {isSentRoute ? (
+          <View style={[styles.mt16, styles.flex1MinHeight0]}>
+            <ScrollView style={styles.flex1MinHeight0} contentContainerStyle={styles.pb40}>
+              <View style={styles.mb24}>
+                <Text style={styles.sectionHeader}>
+                  Sent Invites {sentInvites.length > 0 ? `(${sentInvites.length})` : ""}
+                </Text>
+
+                {sentInvites.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyEmoji}>{socialEmptyEmoji}</Text>
+                    <Text style={styles.emptyTitle}>{socialEmptyTitle}</Text>
+                    <Text style={styles.emptyDesc}>{socialEmptyDesc}</Text>
+                  </View>
+                ) : (
+                  sentInvites.map((invite) => (
+                    <InviteCard
+                      key={invite.id}
+                      invite={invite}
+                      onRSVP={invite.group ? handleGroupRSVP : handleFriendRSVP}
+                      showGroup={!!invite.group}
+                      readOnly
+                      onClick={() => {
+                        setSelectedInvite(invite);
+                        setExpandedSections({
+                          going: Platform.OS === "ios",
+                          maybe: Platform.OS === "ios",
+                          no: Platform.OS === "ios",
+                          pending: Platform.OS === "ios",
+                        });
+                      }}
+                      onGroupClick={() => {
+                        if (!invite.group) return;
+                        const group = GROUPS.find((g) => g.name === invite.group);
+                        if (group) {
+                          setGroupToView(group);
+                          setShowGroupDetailsModal(true);
+                        }
+                      }}
+                    />
+                  ))
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        ) : (
+          <>
+            {/* Tabs */}
+            <View style={[styles.mt16, styles.rowGap8]}>
           <Pressable
             onPress={() => setActiveTab("groups")}
             style={[styles.tabBtn, activeTab === "groups" ? styles.tabActive : styles.tabInactive]}
           >
-            <Text style={[styles.tabText, activeTab === "groups" ? styles.textWhite : styles.textSlate900]}>
-              📚 Group Invites{" "}
+              <Text style={[styles.tabText, activeTab === "groups" ? styles.textWhite : styles.textSlate900]}>
+                📚 Group Invites{" "}
               {groupTabCount > 0 ? `(${groupTabCount})` : ""}
             </Text>
           </Pressable>
@@ -1281,8 +1409,8 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
             onPress={() => setActiveTab("friends")}
             style={[styles.tabBtn, activeTab === "friends" ? styles.tabActive : styles.tabInactive]}
           >
-            <Text style={[styles.tabText, activeTab === "friends" ? styles.textWhite : styles.textSlate900]}>
-              👥 Friend Invites{" "}
+              <Text style={[styles.tabText, activeTab === "friends" ? styles.textWhite : styles.textSlate900]}>
+                👥 Friend Invites{" "}
               {friendTabCount > 0 ? `(${friendTabCount})` : ""}
             </Text>
           </Pressable>
@@ -1318,6 +1446,24 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
                 📅 Calendar ({activeCalendarCount})
               </Text>
             </Pressable>
+
+              {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                <Pressable
+                  onPress={() => router.push("/history/social-expired")}
+                  style={[styles.filterBtn, styles.filterInactive]}
+                >
+                  <Text style={[styles.filterText, styles.textSlate700]}>History</Text>
+                </Pressable>
+              )}
+
+              {isHistory && (
+                <Pressable
+                  onPress={() => router.push("/history/social-sent")}
+                  style={[styles.filterBtn, styles.filterInactive]}
+                >
+                  <Text style={[styles.filterText, styles.textSlate700]}>Sent</Text>
+                </Pressable>
+              )}
             </View>
 
             {canSelectBatch && (
@@ -1395,9 +1541,15 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
                           invite={invite}
                           onRSVP={handleGroupRSVP}
                           showGroup={true}
+                          readOnly={isHistory || isSentRoute}
                           onClick={() => {
                             setSelectedInvite(invite);
-                            setExpandedSections({ going: false, maybe: false, no: false, pending: false });
+                            setExpandedSections({
+                              going: Platform.OS === "ios",
+                              maybe: Platform.OS === "ios",
+                              no: Platform.OS === "ios",
+                              pending: Platform.OS === "ios",
+                            });
                           }}
                           batchMode={batchMode}
                           isSelected={selectedInviteIds.includes(invite.id)}
@@ -1438,6 +1590,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
                           onEditReminder={(evt) => handleEditReminder(evt, true)}
                           onRemove={(id) => handleRemoveFromCalendar(id, true)}
                           showGroup={true}
+                          readOnly={isHistory || isSentRoute}
                           batchMode={batchMode}
                           isSelected={selectedCalendarIds.includes(event.id)}
                           onToggleSelect={() => toggleCalendarSelection(event.id)}
@@ -1476,9 +1629,15 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
                           invite={invite}
                           onRSVP={handleFriendRSVP}
                           showGroup={false}
+                          readOnly={isHistory || isSentRoute}
                           onClick={() => {
                             setSelectedInvite(invite);
-                            setExpandedSections({ going: false, maybe: false, no: false, pending: false });
+                            setExpandedSections({
+                              going: Platform.OS === "ios",
+                              maybe: Platform.OS === "ios",
+                              no: Platform.OS === "ios",
+                              pending: Platform.OS === "ios",
+                            });
                           }}
                           batchMode={batchMode}
                           isSelected={selectedInviteIds.includes(invite.id)}
@@ -1512,6 +1671,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
                           onEditReminder={(evt) => handleEditReminder(evt, false)}
                           onRemove={(id) => handleRemoveFromCalendar(id, false)}
                           showGroup={false}
+                          readOnly={isHistory || isSentRoute}
                           batchMode={batchMode}
                           isSelected={selectedCalendarIds.includes(event.id)}
                           onToggleSelect={() => toggleCalendarSelection(event.id)}
@@ -1523,7 +1683,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
               </>
             )}
 
-            {!isHistory && (
+            {!isHistory && !isAnsweredRoute && !isSentRoute && (
               <Pressable
                 onPress={() => router.push("/history/social-expired")}
                 style={styles.historyCard}
@@ -1536,12 +1696,18 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
             )}
           </ScrollView>
         </View>
+        </>
+      )}
 
         {/* Invite Detail Modal (selectedInvite) */}
         {selectedInvite && (
           <Modal transparent animationType="fade" visible onRequestClose={() => setSelectedInvite(null)}>
-            <Pressable onPress={() => setSelectedInvite(null)} style={styles.modalBackdrop}>
-              <Pressable onPress={(e) => e.stopPropagation()} style={styles.detailSheet}>
+            <View style={styles.modalBackdrop}>
+              <Pressable
+                onPress={() => setSelectedInvite(null)}
+                style={StyleSheet.absoluteFillObject}
+              />
+              <View style={styles.detailSheet}>
                 {/* Sticky Header */}
                 <View style={styles.detailHeader}>
                   <View style={styles.flex1Min0}>
@@ -1551,10 +1717,16 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
 
                     <View style={styles.detailMeta}>
                       {!!selectedInvite.group && (
-                        <Text numberOfLines={1} style={styles.detailMetaText}>📚 {selectedInvite.group}</Text>
+                        <Text numberOfLines={1} style={styles.detailMetaText}>
+                          📚 {selectedInvite.group}
+                        </Text>
                       )}
-                      <Text numberOfLines={1} style={styles.detailMetaText}>👤 {selectedInvite.organizer}</Text>
-                      <Text numberOfLines={1} style={styles.detailMetaText}>📍 {selectedInvite.location}</Text>
+                      <Text numberOfLines={1} style={styles.detailMetaText}>
+                        👤 {selectedInvite.organizer}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.detailMetaText}>
+                        📍 {selectedInvite.location}
+                      </Text>
                       <Text numberOfLines={1} style={styles.detailMetaText}>
                         🕒 {formatDateLong(new Date(selectedInvite.startAt))} •{" "}
                         {formatTime(new Date(selectedInvite.startAt))}
@@ -1568,6 +1740,54 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
                 </View>
 
                 <ScrollView style={styles.detailBody} contentContainerStyle={styles.p20}>
+                  {isSentRoute && selectedInviteStats && (
+                    <View style={[styles.sentCard, styles.mb16]}>
+                      <View style={styles.sentHeaderRow}>
+                        <Text style={styles.sentTitle}>Sent Dashboard</Text>
+                        <View style={styles.sentBadge}>
+                          <Text style={styles.sentBadgeText}>{selectedInviteStats.responseRate}% responded</Text>
+                        </View>
+                      </View>
+                      <View style={styles.sentBarTrack}>
+                        <View
+                          style={[styles.sentBarFill, { width: `${selectedInviteStats.responseRate}%` }]}
+                        />
+                      </View>
+
+                      <View style={styles.sentInsightRow}>
+                        <View style={styles.sentInsightCard}>
+                          <Text style={styles.sentInsightLabel}>Estimated turnout</Text>
+                          <Text style={styles.sentInsightValue}>{selectedInviteStats.estimatedTurnout}</Text>
+                          <Text style={styles.sentInsightSub}>
+                            {selectedInviteStats.going} going + {selectedInviteStats.maybe} maybe
+                          </Text>
+                        </View>
+                        <View style={styles.sentInsightCard}>
+                          <Text style={styles.sentInsightLabel}>Momentum</Text>
+                          <Text style={styles.sentInsightValue}>{selectedInviteStats.momentum}</Text>
+                          <Text style={styles.sentInsightSub}>
+                            {selectedInviteStats.responded} of {selectedInviteStats.totalInvited} responded
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.sentInsightRow}>
+                        <View style={styles.sentInsightCard}>
+                          <Text style={styles.sentInsightLabel}>Friend mix</Text>
+                          <Text style={styles.sentInsightValue}>{selectedInviteStats.friendRate}%</Text>
+                          <Text style={styles.sentInsightSub}>
+                            {selectedInviteStats.friendCount} friends listed
+                          </Text>
+                        </View>
+                        <View style={styles.sentInsightCard}>
+                          <Text style={styles.sentInsightLabel}>Starts in</Text>
+                          <Text style={styles.sentInsightValue}>{selectedInviteStats.daysLabel}</Text>
+                          <Text style={styles.sentInsightSub}>{formatDateLong(selectedInviteStats.startAt)}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
                   {/* Quick Stats Pills */}
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.mb16}>
                     <View style={styles.rowGap8}>
@@ -1651,8 +1871,8 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
                     />
                   </View>
                 </ScrollView>
-              </Pressable>
-            </Pressable>
+              </View>
+            </View>
           </Modal>
         )}
 
@@ -1760,7 +1980,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" } = {}
         {/* RSVP Toast */}
         <RSVPToast
           toast={rsvpToast}
-          onViewAnswered={() => setShowArchive(true)}
+          onViewAnswered={() => router.push("/history/social-answered")}
           onDismiss={() => setRsvpToast(null)}
         />
       </View>
@@ -1835,7 +2055,7 @@ const styles = createScaledStyles({
   mb12: { marginBottom: 12 },
   mb16: { marginBottom: 16 },
   mb24: { marginBottom: 24 },
-  pb40: { paddingBottom: 40 },
+  pb40: { paddingBottom: 120 },
   p20: { padding: 20 },
   p24: { padding: 24 },
 
@@ -1943,6 +2163,36 @@ const styles = createScaledStyles({
   historyCard: { borderRadius: 18, borderWidth: 1, borderColor: "#e2e8f0", backgroundColor: "#ffffff", padding: 16, alignItems: "center", marginTop: 12 },
   historyTitle: { fontSize: 14, fontWeight: "800", color: "#0f172a" },
   historySub: { marginTop: 4, fontSize: 12, color: "#64748b" },
+
+  /* sent dashboard */
+  sentCard: { borderRadius: 18, borderWidth: 1, borderColor: "#e2e8f0", backgroundColor: "#ffffff", padding: 16 },
+  sentHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  sentTitle: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
+  sentSubtitle: { fontSize: 12, fontWeight: "700", color: "#64748b" },
+  sentBadge: { borderRadius: 999, backgroundColor: "#e0f2fe", paddingHorizontal: 10, paddingVertical: 4 },
+  sentBadgeText: { color: "#0369a1", fontSize: 12, fontWeight: "800" },
+  sentBarTrack: { height: 8, borderRadius: 999, backgroundColor: "#e2e8f0", overflow: "hidden", marginTop: 10 },
+  sentBarFill: { height: "100%", backgroundColor: "#2563eb" },
+  sentStatRow: { marginTop: 12, flexDirection: "row", justifyContent: "space-between", gap: 10 },
+  sentStatBlock: { flex: 1, alignItems: "center" },
+  sentStatValue: { fontSize: 18, fontWeight: "900", color: "#0f172a" },
+  sentStatLabel: { marginTop: 4, fontSize: 11, fontWeight: "700", color: "#64748b", textAlign: "center" },
+  sentPillRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  sentPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  sentPillText: { fontSize: 12, fontWeight: "800" },
+  sentInsightRow: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  sentInsightCard: {
+    flex: 1,
+    minWidth: 140,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    padding: 12,
+  },
+  sentInsightLabel: { fontSize: 11, fontWeight: "800", color: "#64748b", textTransform: "uppercase" },
+  sentInsightValue: { marginTop: 6, fontSize: 18, fontWeight: "900", color: "#0f172a" },
+  sentInsightSub: { marginTop: 4, fontSize: 11, fontWeight: "600", color: "#475569" },
 
   /* card base */
   cardBase: { borderRadius: 18, borderWidth: 2, padding: 16, marginBottom: 12 },
@@ -2068,7 +2318,7 @@ const styles = createScaledStyles({
   reminderFooterBtn: { flex: 1 },
 
   /* detail modal */
-  detailSheet: { backgroundColor: "#ffffff", borderRadius: 22, overflow: "hidden", width: "100%", maxWidth: 720, alignSelf: "center", maxHeight: 680 },
+  detailSheet: { backgroundColor: "#ffffff", borderRadius: 22, overflow: "hidden", width: "100%", maxWidth: 720, alignSelf: "center", maxHeight: 680, height: "80%" },
   detailHeader: { backgroundColor: "#4f46e5", paddingHorizontal: 18, paddingVertical: 16, flexDirection: "row", gap: 12, alignItems: "flex-start" },
   detailTitle: { color: "#ffffff", fontSize: 18, fontWeight: "800" },
   detailMeta: { marginTop: 10, gap: 4 },
@@ -2136,4 +2386,6 @@ const styles = createScaledStyles({
   footerBtnText: { fontWeight: "900" },
   footerBtnTextPrimary: { fontWeight: "900", color: "#ffffff" },
 });
+
+
 

@@ -20,6 +20,8 @@ export default function RootLayout() {
 				{/* Event detail (normal push) */}
 				<Stack.Screen name="meeting/[id]" options={{ title: "Event", headerBackTitle: "Back" }} />
 				<Stack.Screen name="history/social-expired" options={{ title: "History", headerBackTitle: "Back" }} />
+				<Stack.Screen name="history/social-answered" options={{ title: "Edit", headerBackTitle: "Back" }} />
+				<Stack.Screen name="history/social-sent" options={{ title: "Sent", headerBackTitle: "Back" }} />
 
 				{/* Create screen as a modal */}
 				<Stack.Screen name="modal/create" options={{ presentation: "modal", title: "New Event" }} />
