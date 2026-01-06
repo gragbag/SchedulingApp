@@ -18,8 +18,19 @@ import { Event, EventType } from "./types";
 
 type LastCreated = Pick<CreateInvitePayload, "eventType" | "sendTo">;
 
+export type UserProfile = {
+	username: string;
+	name: string;
+	aboutMe: string;
+	profilePicture: string; // emoji for now
+};
+
 type State = {
 	events: Event[];
+	isLoggedIn: boolean;
+	userProfile: UserProfile;
+	updateProfile: (profile: Partial<UserProfile>) => void;
+	setLoggedIn: (next: boolean) => void;
 	addEvent: (e: Omit<Event, "id">) => string;
 	getEventById: (id: string) => Event | undefined;
 	eventsForDay: (day: Date) => Event[];
@@ -68,11 +79,22 @@ function seedEvents(): Event[] {
 
 export const useAppStore = create<State>((set, get) => ({
 	events: seedEvents(),
+	isLoggedIn: false,
+	userProfile: {
+		username: "@yourusername",
+		name: "Your Name",
+		aboutMe: "Tell people a bit about yourself...",
+		profilePicture: "",
+	},
 	groupInvites: GROUP_INVITES,
 	friendInvites: FRIEND_INVITES,
 	groupCalendarEvents: GROUP_CALENDAR_EVENTS,
 	friendCalendarEvents: FRIEND_CALENDAR_EVENTS,
 	lastCreated: null,
+
+	updateProfile: (profile) => {
+		set((s) => ({ userProfile: { ...s.userProfile, ...profile } }));
+	},
 
 	addEvent: (e) => {
 		const id = makeId();
@@ -221,4 +243,7 @@ export const useAppStore = create<State>((set, get) => ({
 	},
 
 	clearLastCreated: () => set({ lastCreated: null }),
+	setLoggedIn: (next) => set({ isLoggedIn: next }),
 }));
+
+

@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Alert,
@@ -932,6 +932,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
   const isHistory = modeOverride === "history";
   const isAnsweredRoute = modeOverride === "answered";
   const isSentRoute = modeOverride === "sent";
+  const { tab, filter } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState<"groups" | "friends">("groups");
   const showArchive = isAnsweredRoute;
   const [filterType, setFilterType] = useState<"all" | "social" | "calendar">("all");
@@ -1306,6 +1307,18 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
       setSelectedCalendarIds([]);
     }
   }, [showArchive, canSelectBatch]);
+
+  useEffect(() => {
+    const tabParam = Array.isArray(tab) ? tab[0] : tab;
+    if (tabParam === "groups" || tabParam === "friends") {
+      setActiveTab(tabParam);
+    }
+
+    const filterParam = Array.isArray(filter) ? filter[0] : filter;
+    if (filterParam === "all" || filterParam === "social" || filterParam === "calendar") {
+      setFilterType(filterParam);
+    }
+  }, [tab, filter]);
 
   const tabsAndFilters = (
     <>

@@ -11,12 +11,16 @@ export default function RootLayout() {
 	return (
 		<ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
 			<Stack>
+				<Stack.Screen name="auth" options={{ headerShown: false }} />
 				<Stack.Screen
 					name="(tabs)"
 					options={{
 						headerShown: false,
 					}}
 				/>
+				{/* Profile screen */}
+				<Stack.Screen name="profile" options={{ headerShown: false }} />
+
 				{/* Event detail (normal push) */}
 				<Stack.Screen name="meeting/[id]" options={{ title: "Event", headerBackTitle: "Back" }} />
 				<Stack.Screen name="history/social-expired" options={{ title: "History", headerBackTitle: "Back" }} />

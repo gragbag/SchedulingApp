@@ -9,11 +9,24 @@ export default function TabsLayout() {
 				name="index"
 				options={{
 					title: "Home",
+					headerShown: true,
 					headerRight: () => <ProfileHeaderButton />,
 				}}
 			/>
-			<Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
-			<Tabs.Screen name="social" options={{ title: "Social" }} />
+			<Tabs.Screen
+				name="calendar"
+				options={{
+					title: "Calendar",
+					headerRight: () => <ProfileHeaderButton />,
+				}}
+			/>
+			<Tabs.Screen
+				name="social"
+				options={{
+					title: "Social",
+					headerRight: () => <ProfileHeaderButton />,
+				}}
+			/>
 		</Tabs>
 	);
 }
