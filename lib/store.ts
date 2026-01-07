@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { dayKeyLocal, parseISO } from "./datetime";
 import {
+	Attendee,
 	CalendarEvent,
 	CreateInvitePayload,
 	FRIEND_CALENDAR_EVENTS,
@@ -25,6 +26,11 @@ export type UserProfile = {
 	profilePicture: string; // emoji for now
 };
 
+export type EventConflict = {
+	event1: Event;
+	event2: Event;
+};
+
 type State = {
 	events: Event[];
 	isLoggedIn: boolean;
@@ -36,6 +42,7 @@ type State = {
 	eventsForDay: (day: Date) => Event[];
 	hasEventsOnDay: (day: Date) => boolean;
 	deleteEvent: (id: string) => void;
+	getConflicts: (forDate?: Date) => EventConflict[];
 	groupInvites: Invite[];
 	friendInvites: Invite[];
 	groupCalendarEvents: CalendarEvent[];
@@ -45,6 +52,12 @@ type State = {
 	createInvite: (payload: CreateInvitePayload) => boolean;
 	lastCreated: LastCreated | null;
 	clearLastCreated: () => void;
+	dismissedNotificationIds: string[];
+	dismissNotification: (id: string) => void;
+	clearAllNotifications: (ids: string[]) => void;
+	inviteNotificationDismissals: Record<string, string[]>;
+	dismissInviteNotification: (id: string) => void;
+	clearInviteNotifications: (ids: string[]) => void;
 };
 
 function makeId() {
@@ -91,6 +104,8 @@ export const useAppStore = create<State>((set, get) => ({
 	groupCalendarEvents: GROUP_CALENDAR_EVENTS,
 	friendCalendarEvents: FRIEND_CALENDAR_EVENTS,
 	lastCreated: null,
+	dismissedNotificationIds: [],
+	inviteNotificationDismissals: {},
 
 	updateProfile: (profile) => {
 		set((s) => ({ userProfile: { ...s.userProfile, ...profile } }));
@@ -121,6 +136,33 @@ export const useAppStore = create<State>((set, get) => ({
 		set((s) => ({ events: s.events.filter((ev) => ev.id !== id) }));
 	},
 
+	getConflicts: (forDate) => {
+		const events = get().events;
+		const conflicts: EventConflict[] = [];
+
+		// Filter events for specific date if provided
+		const eventsToCheck = forDate
+			? events.filter((e) => dayKeyLocal(parseISO(e.startAt)) === dayKeyLocal(forDate))
+			: events;
+
+		// Sort by start time
+		const sorted = [...eventsToCheck].sort(sortByStart);
+
+		// Check for overlaps
+		for (let i = 0; i < sorted.length - 1; i++) {
+			const current = sorted[i];
+			const next = sorted[i + 1];
+			const currentEnd = parseISO(current.endAt);
+			const nextStart = parseISO(next.startAt);
+
+			if (currentEnd > nextStart) {
+				conflicts.push({ event1: current, event2: next });
+			}
+		}
+
+		return conflicts;
+	},
+
 	updateInviteRSVP: (id, status, isGroup) => {
 		const applyRSVP = (inv: Invite) => {
 			if (inv.id !== id) return inv;
@@ -149,18 +191,71 @@ export const useAppStore = create<State>((set, get) => ({
 			};
 		};
 
+		// Find the invite to potentially add to calendar
+		let invite: Invite | undefined;
 		if (isGroup) {
+			invite = get().groupInvites.find((inv) => inv.id === id);
 			set((s) => ({ groupInvites: s.groupInvites.map(applyRSVP) }));
 		} else {
+			invite = get().friendInvites.find((inv) => inv.id === id);
 			set((s) => ({ friendInvites: s.friendInvites.map(applyRSVP) }));
+		}
+
+		// If RSVP is "yes", automatically add to calendar
+		if (status === "yes" && invite) {
+			const existingEvent = get().events.find(
+				(e) => e.title === invite!.title && e.startAt === invite!.startAt
+			);
+
+			if (!existingEvent) {
+				get().addEvent({
+					title: invite.title,
+					type: "meetup", // Social invites are meetups
+					startAt: invite.startAt,
+					endAt: invite.endAt,
+					location: invite.location,
+					notes: `Organized by ${invite.organizer}${invite.group ? ` • ${invite.group}` : ""}`,
+				});
+			}
 		}
 	},
 
 	updateCalendarEvent: (id, isGroup, updates) => {
+		// Find the calendar event to potentially add to main calendar
+		let calEvent: CalendarEvent | undefined;
 		if (isGroup) {
+			calEvent = get().groupCalendarEvents.find((evt) => evt.id === id);
 			set((s) => ({ groupCalendarEvents: s.groupCalendarEvents.map((evt) => (evt.id === id ? { ...evt, ...updates } : evt)) }));
 		} else {
+			calEvent = get().friendCalendarEvents.find((evt) => evt.id === id);
 			set((s) => ({ friendCalendarEvents: s.friendCalendarEvents.map((evt) => (evt.id === id ? { ...evt, ...updates } : evt)) }));
+		}
+
+		// If calendar event is accepted, automatically add to calendar
+		if (updates.acceptStatus === "accepted" && calEvent) {
+			const existingEvent = get().events.find(
+				(e) => e.title === calEvent!.title && e.startAt === calEvent!.startAt
+			);
+
+			if (!existingEvent) {
+				// Determine event type from title or default to class
+				let eventType: EventType = "class";
+				const titleLower = calEvent.title.toLowerCase();
+				if (titleLower.includes("study") || titleLower.includes("homework")) {
+					eventType = "study";
+				} else if (titleLower.includes("meet") || titleLower.includes("coffee") || titleLower.includes("hangout")) {
+					eventType = "meetup";
+				}
+
+				get().addEvent({
+					title: calEvent.title,
+					type: eventType,
+					startAt: calEvent.startAt,
+					endAt: calEvent.endAt,
+					location: calEvent.location,
+					notes: calEvent.notes || `Created by ${calEvent.creator}${calEvent.group ? ` • ${calEvent.group}` : ""}`,
+				});
+			}
 		}
 	},
 
@@ -173,22 +268,22 @@ export const useAppStore = create<State>((set, get) => ({
 			const group = payload.sendTo === "group" ? GROUPS.find((g) => g.id === payload.selectedGroupId) : null;
 			if (payload.sendTo === "group" && !group) return false;
 
-			const attendees =
+			const attendees: Attendee[] =
 				payload.sendTo === "group" && group
 					? group.members.map((member) => ({
 							name: member.name,
-							status: null,
+							status: null as RSVPValue,
 							isFriend: isFriend(member.name),
 						}))
 					: payload.selectedFriendIds
 							.map((id) => {
 								const friend = FRIENDS.find((f) => f.id === id);
-								return friend ? { name: friend.name, status: null, isFriend: true } : null;
+								return friend ? { name: friend.name, status: null as RSVPValue, isFriend: true } : null;
 							})
-							.filter((friend): friend is Invite["attendees"][number] => friend !== null);
+							.filter((friend): friend is Attendee => friend !== null);
 
 			if (payload.sendTo === "friends") {
-				attendees.unshift({ name: "You", status: null, isFriend: false });
+				attendees.unshift({ name: "You", status: null as RSVPValue, isFriend: false });
 			}
 
 			const totalInvited = payload.sendTo === "group" && group ? group.totalMembers : attendees.length;
@@ -243,7 +338,39 @@ export const useAppStore = create<State>((set, get) => ({
 	},
 
 	clearLastCreated: () => set({ lastCreated: null }),
+	dismissNotification: (id) =>
+		set((s) =>
+			s.dismissedNotificationIds.includes(id)
+				? s
+				: { dismissedNotificationIds: [...s.dismissedNotificationIds, id] }
+		),
+	clearAllNotifications: (ids) =>
+		set((s) => ({
+			dismissedNotificationIds: s.dismissedNotificationIds.filter((id) => !ids.includes(id)),
+		})),
+	dismissInviteNotification: (id) =>
+		set((s) => {
+			const todayKey = dayKeyLocal(new Date());
+			const existing = s.inviteNotificationDismissals[todayKey] ?? [];
+			if (existing.includes(id)) return s;
+			return {
+				inviteNotificationDismissals: {
+					...s.inviteNotificationDismissals,
+					[todayKey]: [...existing, id],
+				},
+			};
+		}),
+	clearInviteNotifications: (ids) =>
+		set((s) => {
+			const todayKey = dayKeyLocal(new Date());
+			const existing = s.inviteNotificationDismissals[todayKey] ?? [];
+			const merged = new Set([...existing, ...ids]);
+			return {
+				inviteNotificationDismissals: {
+					...s.inviteNotificationDismissals,
+					[todayKey]: Array.from(merged),
+				},
+			};
+		}),
 	setLoggedIn: (next) => set({ isLoggedIn: next }),
 }));
-
-

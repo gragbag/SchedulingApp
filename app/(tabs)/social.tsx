@@ -5,7 +5,6 @@ import {
 	Animated,
 	Easing,
 	Modal,
-	PanResponder,
 	Platform,
 	Pressable,
 	ScrollView,
@@ -34,7 +33,7 @@ import { useAppStore } from "../../lib/store";
  * - Tailwind classes were translated into StyleSheet styles.
  * - Web-only behaviors like hover were translated to press feedback.
  * - Fixed/sticky overlays were implemented with Modal + sticky header View.
- * - Swipe gestures implemented with PanResponder + Animated.
+ * - Swipe gestures removed per request; interactions are tap-based.
  */
 
 /* ----------------------------- Mock Data ----------------------------- */
@@ -53,6 +52,13 @@ function formatTime(date: string | Date) {
   return new Date(date).toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
+  });
+}
+
+function formatDateShort(date: string | Date) {
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -172,30 +178,35 @@ function CompactAttendeeList({
 type InviteCardProps = {
   invite: Invite;
   onRSVP: (id: string, status: RSVPValue) => void;
-  showGroup?: boolean;
   onClick?: (() => void) | null;
   batchMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
-  onGroupClick?: () => void;
+  sourceLabel?: string;
+  sourceIcon?: string;
+  onSourcePress?: () => void;
   readOnly?: boolean;
+  showExpiredBadge?: boolean;
 };
 
 function InviteCard({
   invite,
   onRSVP,
-  showGroup = false,
   onClick,
   batchMode = false,
   isSelected = false,
   onToggleSelect,
-  onGroupClick,
+  sourceLabel,
+  sourceIcon,
+  onSourcePress,
   readOnly = false,
+  showExpiredBadge = false,
 }: InviteCardProps) {
   const start = new Date(invite.startAt);
   const going = invite.attendees.filter((a) => a.status === "yes").length;
   const maybe = invite.attendees.filter((a) => a.status === "maybe").length;
   const pending = invite.attendees.filter((a) => a.status === null).length;
+  const showExpired = showExpiredBadge && !invite.rsvpStatus;
 
   const handleCardPress = () => {
     if (readOnly) {
@@ -234,21 +245,27 @@ function InviteCard({
             <View style={styles.flex1}>
               <Text style={styles.cardTitle}>{invite.title}</Text>
 
-              {showGroup && invite.group && onGroupClick && (
-                <Pressable
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    onGroupClick();
-                  }}
-                  style={styles.mt4}
-                >
-                  <Text style={styles.groupLink}>📚 {invite.group}</Text>
-                </Pressable>
-              )}
-
-              {showGroup && invite.group && !onGroupClick && (
-                <Text style={[styles.mt4, styles.groupText]}>📚 {invite.group}</Text>
-              )}
+              {sourceLabel ? (
+                onSourcePress ? (
+                  <Pressable
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onSourcePress();
+                    }}
+                    style={[styles.mt4, styles.sourcePill]}
+                  >
+                    <Text style={styles.sourcePillText}>
+                      {sourceIcon ? `${sourceIcon} ` : ""}{sourceLabel}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <View style={[styles.mt4, styles.sourcePill]}>
+                    <Text style={styles.sourcePillText}>
+                      {sourceIcon ? `${sourceIcon} ` : ""}{sourceLabel}
+                    </Text>
+                  </View>
+                )
+              ) : null}
 
               <Text style={[styles.mt4, styles.textSlate600]}>
                 Organized by {invite.organizer}
@@ -256,11 +273,13 @@ function InviteCard({
             </View>
           </View>
 
-          {invite.rsvpStatus && (
+          {(invite.rsvpStatus || showExpired) && (
             <View
               style={[
                 styles.rsvpPill,
-                invite.rsvpStatus === "yes"
+                showExpired
+                  ? styles.bgSlate100
+                  : invite.rsvpStatus === "yes"
                   ? styles.bgGreen100
                   : invite.rsvpStatus === "maybe"
                   ? styles.bgYellow100
@@ -270,14 +289,18 @@ function InviteCard({
               <Text
                 style={[
                   styles.rsvpPillText,
-                  invite.rsvpStatus === "yes"
+                  showExpired
+                    ? styles.textSlate600
+                    : invite.rsvpStatus === "yes"
                     ? styles.textGreen700
                     : invite.rsvpStatus === "maybe"
                     ? styles.textYellow700
                     : styles.textRed700,
                 ]}
               >
-                {invite.rsvpStatus === "yes"
+                {showExpired
+                  ? "Expired"
+                  : invite.rsvpStatus === "yes"
                   ? "Going"
                   : invite.rsvpStatus === "maybe"
                   ? "Maybe"
@@ -346,14 +369,16 @@ type CalendarEventCardProps = {
   onDecline: (id: string) => void;
   onEditReminder: (event: CalendarEvent) => void;
   onRemove: (id: string) => void;
-  showGroup?: boolean;
   isArchived?: boolean;
   onRestore?: (id: string) => void;
   batchMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: () => void;
-  onGroupClick?: () => void;
+  sourceLabel?: string;
+  sourceIcon?: string;
+  onSourcePress?: () => void;
   readOnly?: boolean;
+  showExpiredBadge?: boolean;
 };
 
 function CalendarEventCard({
@@ -362,19 +387,22 @@ function CalendarEventCard({
   onDecline,
   onEditReminder,
   onRemove,
-  showGroup = false,
   isArchived = false,
   onRestore,
   batchMode = false,
   isSelected = false,
   onToggleSelect,
-  onGroupClick,
+  sourceLabel,
+  sourceIcon,
+  onSourcePress,
   readOnly = false,
+  showExpiredBadge = false,
 }: CalendarEventCardProps) {
   const start = new Date(event.startAt);
   const [notesExpanded, setNotesExpanded] = useState(false);
   const noteText = event.notes?.trim() || "";
   const isLongNote = noteText.length > 140;
+  const showExpired = showExpiredBadge && !event.acceptStatus;
 
   const handleCardPress = () => {
     if (readOnly) return;
@@ -415,21 +443,27 @@ function CalendarEventCard({
           <View>
             <Text style={styles.cardTitle}>{event.title}</Text>
 
-            {showGroup && event.group && onGroupClick && (
-              <Pressable
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onGroupClick();
-                }}
-                style={styles.mt2}
-              >
-                <Text style={styles.groupLink}>📚 {event.group}</Text>
-              </Pressable>
-            )}
-
-            {showGroup && event.group && !onGroupClick && (
-              <Text style={[styles.mt2, styles.groupText]}>📚 {event.group}</Text>
-            )}
+            {sourceLabel ? (
+              onSourcePress ? (
+                <Pressable
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    onSourcePress();
+                  }}
+                  style={[styles.mt2, styles.sourcePill]}
+                >
+                  <Text style={styles.sourcePillText}>
+                    {sourceIcon ? `${sourceIcon} ` : ""}{sourceLabel}
+                  </Text>
+                </Pressable>
+              ) : (
+                <View style={[styles.mt2, styles.sourcePill]}>
+                  <Text style={styles.sourcePillText}>
+                    {sourceIcon ? `${sourceIcon} ` : ""}{sourceLabel}
+                  </Text>
+                </View>
+              )
+            ) : null}
           </View>
         </View>
 
@@ -449,6 +483,12 @@ function CalendarEventCard({
               <Text style={[styles.statusPillText, styles.textSlate600]}>Declined</Text>
             </Pressable>
           ))}
+
+        {showExpired && (
+          <View style={[styles.statusPill, styles.statusPillSlate]}>
+            <Text style={[styles.statusPillText, styles.textSlate600]}>Expired</Text>
+          </View>
+        )}
       </View>
 
       <Text style={[styles.textSm, styles.textSlate600, styles.mb12]}>
@@ -551,139 +591,45 @@ function CalendarEventCard({
 type SwipeableInviteCardProps = {
   invite: Invite;
   onRSVP: (id: string, status: RSVPValue) => void;
-  showGroup: boolean;
   onClick?: () => void;
   batchMode: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
-  onGroupClick?: () => void;
+  sourceLabel?: string;
+  sourceIcon?: string;
+  onSourcePress?: () => void;
   readOnly?: boolean;
+  showExpiredBadge?: boolean;
 };
 
 function SwipeableInviteCard({
   invite,
   onRSVP,
-  showGroup,
   onClick,
   batchMode,
   isSelected,
   onToggleSelect,
-  onGroupClick,
+  sourceLabel,
+  sourceIcon,
+  onSourcePress,
   readOnly = false,
+  showExpiredBadge = false,
 }: SwipeableInviteCardProps) {
-  const minSwipeDistance = 50;
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isAnimatingRef = useRef(false);
-
-  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => {
-          if (readOnly || batchMode || invite.rsvpStatus) return false;
-          return Math.abs(gesture.dx) > 5 && Math.abs(gesture.dy) < 15;
-        },
-        onPanResponderMove: (_, gesture) => {
-          if (readOnly || batchMode || invite.rsvpStatus) return;
-          if (isAnimatingRef.current) return;
-          const offset = clamp(gesture.dx, -150, 150);
-          translateX.setValue(offset);
-        },
-        onPanResponderRelease: (_, gesture) => {
-          if (readOnly || batchMode || invite.rsvpStatus) return;
-
-          const dx = gesture.dx;
-          const isRightSwipe = dx > minSwipeDistance;
-          const isLeftSwipe = dx < -minSwipeDistance;
-
-          if (isRightSwipe) {
-            isAnimatingRef.current = true;
-            Animated.timing(translateX, {
-              toValue: 300,
-              duration: 300,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }).start(() => {
-              onRSVP(invite.id, "yes");
-              translateX.setValue(0);
-              isAnimatingRef.current = false;
-            });
-          } else if (isLeftSwipe) {
-            isAnimatingRef.current = true;
-            Animated.timing(translateX, {
-              toValue: -300,
-              duration: 300,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }).start(() => {
-              onRSVP(invite.id, "no");
-              translateX.setValue(0);
-              isAnimatingRef.current = false;
-            });
-          } else {
-            Animated.timing(translateX, {
-              toValue: 0,
-              duration: 200,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }).start(() => {
-              if (onClick && Math.abs(dx) < 10) onClick();
-            });
-          }
-        },
-      }),
-    [batchMode, invite.id, invite.rsvpStatus, onClick, onRSVP, translateX, readOnly]
-  );
-
-  const goingHintOpacity = translateX.interpolate({
-    inputRange: [20, 60],
-    outputRange: [0, 1],
-    extrapolate: "clamp",
-  });
-
-  const cantGoHintOpacity = translateX.interpolate({
-    inputRange: [-60, -20],
-    outputRange: [1, 0],
-    extrapolate: "clamp",
-  });
-
   return (
     <View style={styles.swipeWrap}>
-      {!readOnly && !batchMode && !invite.rsvpStatus && (
-        <>
-          <Animated.View style={[styles.swipeHintLeft, { opacity: goingHintOpacity }]}>
-            <View style={styles.rowGap8}>
-              <Text style={[styles.text2xl, styles.textGreen600]}>✓</Text>
-              <Text style={[styles.fontBold, styles.textSm, styles.textGreen600]}>Going</Text>
-            </View>
-          </Animated.View>
-
-          <Animated.View style={[styles.swipeHintRight, { opacity: cantGoHintOpacity }]}>
-            <View style={styles.rowGap8}>
-              <Text style={[styles.fontBold, styles.textSm, styles.textRed600]}>Can't Go</Text>
-              <Text style={[styles.text2xl, styles.textRed600]}>✗</Text>
-            </View>
-          </Animated.View>
-        </>
-      )}
-
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={{ transform: [{ translateX }] }}
-      >
-        <InviteCard
-          invite={invite}
-          onRSVP={onRSVP}
-          showGroup={showGroup}
-          onClick={onClick ?? null}
-          batchMode={batchMode}
-          isSelected={isSelected}
-          onToggleSelect={onToggleSelect}
-          onGroupClick={onGroupClick}
-          readOnly={readOnly}
-        />
-      </Animated.View>
+      <InviteCard
+        invite={invite}
+        onRSVP={onRSVP}
+        onClick={onClick ?? null}
+        batchMode={batchMode}
+        isSelected={isSelected}
+        onToggleSelect={onToggleSelect}
+        sourceLabel={sourceLabel}
+        sourceIcon={sourceIcon}
+        onSourcePress={onSourcePress}
+        readOnly={readOnly}
+        showExpiredBadge={showExpiredBadge}
+      />
     </View>
   );
 }
@@ -932,8 +878,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
   const isHistory = modeOverride === "history";
   const isAnsweredRoute = modeOverride === "answered";
   const isSentRoute = modeOverride === "sent";
-  const { tab, filter } = useLocalSearchParams();
-  const [activeTab, setActiveTab] = useState<"groups" | "friends">("groups");
+  const { filter } = useLocalSearchParams();
   const showArchive = isAnsweredRoute;
   const [filterType, setFilterType] = useState<"all" | "social" | "calendar">("all");
   const [batchMode, setBatchMode] = useState(false);
@@ -969,7 +914,6 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
   useEffect(() => {
     if (isHistory || isAnsweredRoute || isSentRoute || !lastCreated) return;
     setFilterType(lastCreated.eventType === "social" ? "social" : "calendar");
-    setActiveTab(lastCreated.sendTo === "group" ? "groups" : "friends");
     router.push("/history/social-sent");
     clearLastCreated();
   }, [isHistory, isAnsweredRoute, isSentRoute, lastCreated, clearLastCreated]);
@@ -1022,11 +966,27 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
     );
   };
 
-  const handleBatchRSVP = (status: RSVPStatus) => {
-    const isGroup = activeTab === "groups";
+  const findInviteSource = (inviteId: string) => {
+    const groupInvite = groupInvites.find((inv) => inv.id === inviteId);
+    if (groupInvite) return { invite: groupInvite, isGroup: true };
+    const friendInvite = friendInvites.find((inv) => inv.id === inviteId);
+    if (friendInvite) return { invite: friendInvite, isGroup: false };
+    return null;
+  };
 
+  const findCalendarSource = (eventId: string) => {
+    const groupEvent = groupCalendarEvents.find((evt) => evt.id === eventId);
+    if (groupEvent) return { event: groupEvent, isGroup: true };
+    const friendEvent = friendCalendarEvents.find((evt) => evt.id === eventId);
+    if (friendEvent) return { event: friendEvent, isGroup: false };
+    return null;
+  };
+
+  const handleBatchRSVP = (status: RSVPStatus) => {
     selectedInviteIds.forEach((inviteId) => {
-      if (isGroup) handleGroupRSVP(inviteId, status);
+      const source = findInviteSource(inviteId);
+      if (!source) return;
+      if (source.isGroup) handleGroupRSVP(inviteId, status);
       else handleFriendRSVP(inviteId, status);
     });
 
@@ -1039,8 +999,11 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
   };
 
   const handleBatchAcceptCalendar = () => {
-    const isGroup = activeTab === "groups";
-    selectedCalendarIds.forEach((eventId) => handleAcceptCalendarEvent(eventId, isGroup));
+    selectedCalendarIds.forEach((eventId) => {
+      const source = findCalendarSource(eventId);
+      if (!source) return;
+      handleAcceptCalendarEvent(eventId, source.isGroup);
+    });
     setBatchMode(false);
     setSelectedCalendarIds([]);
   };
@@ -1091,24 +1054,33 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
     Alert.alert("✅ Added", "Event added to your calendar!");
   };
 
-  const pendingGroupInvites = groupInvites.filter((inv) => !inv.rsvpStatus);
-  const pendingFriendInvites = friendInvites.filter((inv) => !inv.rsvpStatus);
-  const pendingGroupCalendar = groupCalendarEvents.filter((evt) => !evt.acceptStatus);
-  const pendingFriendCalendar = friendCalendarEvents.filter((evt) => !evt.acceptStatus);
-
-  const answeredGroupInvites = groupInvites.filter((inv) => !!inv.rsvpStatus);
-  const answeredFriendInvites = friendInvites.filter((inv) => !!inv.rsvpStatus);
-  const answeredGroupCalendar = groupCalendarEvents.filter((evt) => !!evt.acceptStatus);
-  const answeredFriendCalendar = friendCalendarEvents.filter((evt) => !!evt.acceptStatus);
-
-  const sentGroupInvites = groupInvites.filter((inv) => inv.organizer === "You");
-  const sentFriendInvites = friendInvites.filter((inv) => inv.organizer === "You");
-  const sentGroupCalendar = groupCalendarEvents.filter((evt) => evt.creator === "You");
-  const sentFriendCalendar = friendCalendarEvents.filter((evt) => evt.creator === "You");
-  const sentInvites = [...sentGroupInvites, ...sentFriendInvites];
+  const openGroupDetails = (groupName?: string) => {
+    if (!groupName) return;
+    const group = GROUPS.find((g) => g.name === groupName);
+    if (group) {
+      setGroupToView(group);
+      setShowGroupDetailsModal(true);
+    }
+  };
 
   const now = new Date();
   const isExpired = (iso: string) => new Date(iso).getTime() < now.getTime();
+
+  const pendingGroupInvites = groupInvites.filter((inv) => !inv.rsvpStatus && !isExpired(inv.endAt));
+  const pendingFriendInvites = friendInvites.filter((inv) => !inv.rsvpStatus && !isExpired(inv.endAt));
+  const pendingGroupCalendar = groupCalendarEvents.filter((evt) => !evt.acceptStatus && !isExpired(evt.endAt));
+  const pendingFriendCalendar = friendCalendarEvents.filter((evt) => !evt.acceptStatus && !isExpired(evt.endAt));
+
+  const answeredGroupInvites = groupInvites.filter((inv) => !!inv.rsvpStatus && !isExpired(inv.endAt));
+  const answeredFriendInvites = friendInvites.filter((inv) => !!inv.rsvpStatus && !isExpired(inv.endAt));
+  const answeredGroupCalendar = groupCalendarEvents.filter((evt) => !!evt.acceptStatus && !isExpired(evt.endAt));
+  const answeredFriendCalendar = friendCalendarEvents.filter((evt) => !!evt.acceptStatus && !isExpired(evt.endAt));
+
+  const sentGroupInvites = groupInvites.filter((inv) => inv.organizer === "You" && !isExpired(inv.endAt));
+  const sentFriendInvites = friendInvites.filter((inv) => inv.organizer === "You" && !isExpired(inv.endAt));
+  const sentGroupCalendar = groupCalendarEvents.filter((evt) => evt.creator === "You" && !isExpired(evt.endAt));
+  const sentFriendCalendar = friendCalendarEvents.filter((evt) => evt.creator === "You" && !isExpired(evt.endAt));
+  const sentInvites = [...sentGroupInvites, ...sentFriendInvites];
 
   const expiredGroupInvites = groupInvites.filter((inv) => isExpired(inv.endAt));
   const expiredFriendInvites = friendInvites.filter((inv) => isExpired(inv.endAt));
@@ -1144,11 +1116,9 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
     ? answeredFriendCalendar.length
     : pendingFriendCalendar.length;
 
-  const activeSocialCount = activeTab === "groups" ? groupSocialCount : friendSocialCount;
-  const activeCalendarCount = activeTab === "groups" ? groupCalendarCount : friendCalendarCount;
-  const activeTotalCount = activeSocialCount + activeCalendarCount;
-  const groupTabCount = groupSocialCount + groupCalendarCount;
-  const friendTabCount = friendSocialCount + friendCalendarCount;
+  const unifiedSocialCount = groupSocialCount + friendSocialCount;
+  const unifiedCalendarCount = groupCalendarCount + friendCalendarCount;
+  const unifiedTotalCount = unifiedSocialCount + unifiedCalendarCount;
 
   const groupInvitesToShow = isHistory
     ? expiredGroupInvites
@@ -1179,14 +1149,112 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
     ? answeredFriendCalendar
     : pendingFriendCalendar;
 
-  const pendingTotal =
-    activeTab === "groups"
-      ? pendingGroupInvites.length + pendingGroupCalendar.length
-      : pendingFriendInvites.length + pendingFriendCalendar.length;
-  const pendingSocialCount =
-    activeTab === "groups" ? pendingGroupInvites.length : pendingFriendInvites.length;
-  const pendingCalendarCount =
-    activeTab === "groups" ? pendingGroupCalendar.length : pendingFriendCalendar.length;
+  const socialInvitesToShow = useMemo(
+    () => [
+      ...groupInvitesToShow.map((invite) => ({ invite, isGroup: true })),
+      ...friendInvitesToShow.map((invite) => ({ invite, isGroup: false })),
+    ],
+    [friendInvitesToShow, groupInvitesToShow]
+  );
+
+  const calendarEventsToShow = useMemo(
+    () => [
+      ...groupCalendarToShow.map((event) => ({ event, isGroup: true })),
+      ...friendCalendarToShow.map((event) => ({ event, isGroup: false })),
+    ],
+    [friendCalendarToShow, groupCalendarToShow]
+  );
+
+  const unifiedItems = useMemo(() => {
+    const items: Array<
+      | { kind: "social"; startAt: string; invite: Invite; isGroup: boolean }
+      | { kind: "calendar"; startAt: string; event: CalendarEvent; isGroup: boolean }
+    > = [];
+
+    if (filterType !== "calendar") {
+      socialInvitesToShow.forEach(({ invite, isGroup }) => {
+        items.push({ kind: "social", startAt: invite.startAt, invite, isGroup });
+      });
+    }
+
+    if (filterType !== "social") {
+      calendarEventsToShow.forEach(({ event, isGroup }) => {
+        items.push({ kind: "calendar", startAt: event.startAt, event, isGroup });
+      });
+    }
+
+    return items.sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+  }, [calendarEventsToShow, filterType, socialInvitesToShow]);
+
+  const visibleInviteIds = useMemo(() => {
+    if (filterType === "calendar") return [];
+    return socialInvitesToShow.map(({ invite }) => invite.id);
+  }, [filterType, socialInvitesToShow]);
+
+  const visibleCalendarIds = useMemo(() => {
+    if (filterType === "social") return [];
+    return calendarEventsToShow.map(({ event }) => event.id);
+  }, [calendarEventsToShow, filterType]);
+
+  const totalVisibleSelectable = visibleInviteIds.length + visibleCalendarIds.length;
+  const selectedCount = selectedInviteIds.length + selectedCalendarIds.length;
+  const allVisibleSelected =
+    totalVisibleSelectable > 0 &&
+    visibleInviteIds.every((id) => selectedInviteIds.includes(id)) &&
+    visibleCalendarIds.every((id) => selectedCalendarIds.includes(id));
+
+  const pendingSocialCount = pendingGroupInvites.length + pendingFriendInvites.length;
+  const pendingCalendarCount = pendingGroupCalendar.length + pendingFriendCalendar.length;
+  const pendingTotal = pendingSocialCount + pendingCalendarCount;
+
+  const nextPendingItem = useMemo(() => {
+    if (isHistory || isSentRoute || showArchive) return null;
+
+    const items = [
+      ...pendingGroupInvites.map((invite) => ({
+        title: invite.title,
+        startAt: invite.startAt,
+      })),
+      ...pendingFriendInvites.map((invite) => ({
+        title: invite.title,
+        startAt: invite.startAt,
+      })),
+      ...pendingGroupCalendar.map((event) => ({
+        title: event.title,
+        startAt: event.startAt,
+      })),
+      ...pendingFriendCalendar.map((event) => ({
+        title: event.title,
+        startAt: event.startAt,
+      })),
+    ];
+
+    if (items.length === 0) return null;
+
+    const sorted = items.sort(
+      (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
+    );
+    const next = sorted[0];
+    const startDate = new Date(next.startAt);
+    const nowMs = Date.now();
+    const dayDiff = Math.ceil((startDate.getTime() - nowMs) / (1000 * 60 * 60 * 24));
+    const whenLabel =
+      dayDiff <= 0 ? "Today" : dayDiff === 1 ? "Tomorrow" : `In ${dayDiff} days`;
+
+    return {
+      title: next.title,
+      startDate,
+      whenLabel,
+    };
+  }, [
+    isHistory,
+    isSentRoute,
+    showArchive,
+    pendingFriendCalendar,
+    pendingFriendInvites,
+    pendingGroupCalendar,
+    pendingGroupInvites,
+  ]);
 
   const canSelectBatch =
     !isHistory &&
@@ -1197,6 +1265,17 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
       : filterType === "social"
       ? pendingSocialCount > 0
       : pendingCalendarCount > 0);
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedInviteIds([]);
+      setSelectedCalendarIds([]);
+      return;
+    }
+
+    setSelectedInviteIds(visibleInviteIds);
+    setSelectedCalendarIds(visibleCalendarIds);
+  };
 
   const rsvpChangeInvite = rsvpChangeTarget
     ? (rsvpChangeTarget.isGroup ? groupInvites : friendInvites).find(
@@ -1262,6 +1341,22 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
     ? "Responses will appear here."
     : "You're all caught up!";
   const calendarEmptyEmoji = isHistory ? "🕘" : isSentRoute ? "📤" : showArchive ? "✅" : "📅";
+
+  const unifiedEmptyTitle = isHistory
+    ? "No expired items"
+    : isSentRoute
+    ? "No sent items"
+    : showArchive
+    ? "No responses yet"
+    : "You're all caught up";
+  const unifiedEmptyDesc = isHistory
+    ? "Expired invites and events will appear here."
+    : isSentRoute
+    ? "Invites and events you send will appear here."
+    : showArchive
+    ? "Responses will appear here as people reply."
+    : "Nothing waiting on you right now.";
+  const unifiedEmptyEmoji = isHistory ? "🕘" : isSentRoute ? "📤" : showArchive ? "✅" : "🎉";
   const statusLabel = isHistory ? "expired" : isSentRoute ? "sent" : showArchive ? "responses" : "pending";
   const selectedInviteStats = selectedInvite
     ? (() => {
@@ -1309,98 +1404,90 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
   }, [showArchive, canSelectBatch]);
 
   useEffect(() => {
-    const tabParam = Array.isArray(tab) ? tab[0] : tab;
-    if (tabParam === "groups" || tabParam === "friends") {
-      setActiveTab(tabParam);
-    }
-
     const filterParam = Array.isArray(filter) ? filter[0] : filter;
     if (filterParam === "all" || filterParam === "social" || filterParam === "calendar") {
       setFilterType(filterParam);
     }
-  }, [tab, filter]);
+  }, [filter]);
 
   const tabsAndFilters = (
-    <>
-      {/* Tabs */}
-      <View style={[styles.mt16, styles.rowGap8]}>
-        <Pressable
-          onPress={() => setActiveTab("groups")}
-          style={[styles.tabBtn, activeTab === "groups" ? styles.tabActive : styles.tabInactive]}
+    <View style={styles.mt12}>
+      <View style={styles.filterCard}>
+        <View
+          style={[
+            styles.filterRow,
+            isAnsweredRoute || isHistory ? styles.filterRowNoWrap : styles.filterRowWrap,
+          ]}
         >
-          <Text style={[styles.tabText, activeTab === "groups" ? styles.textWhite : styles.textSlate900]}>
-            📚 Group Invites {groupTabCount > 0 ? `(${groupTabCount})` : ""}
-          </Text>
-        </Pressable>
+          <Pressable
+            onPress={() => setFilterType("all")}
+            style={[
+              styles.filterBtn,
+              (isAnsweredRoute || isHistory) && styles.filterBtnEven,
+              filterType === "all" ? styles.filterActive : styles.filterInactive,
+            ]}
+          >
+            <Text numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit minimumFontScale={0.85} style={[styles.filterText, filterType === "all" ? styles.textWhite : styles.textSlate700]}>
+              All ({unifiedTotalCount})
+            </Text>
+          </Pressable>
 
-        <Pressable
-          onPress={() => setActiveTab("friends")}
-          style={[styles.tabBtn, activeTab === "friends" ? styles.tabActive : styles.tabInactive]}
-        >
-          <Text style={[styles.tabText, activeTab === "friends" ? styles.textWhite : styles.textSlate900]}>
-            👥 Friend Invites {friendTabCount > 0 ? `(${friendTabCount})` : ""}
-          </Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={() => setFilterType("social")}
+            style={[
+              styles.filterBtn,
+              (isAnsweredRoute || isHistory) && styles.filterBtnEven,
+              filterType === "social" ? styles.filterActive : styles.filterInactive,
+            ]}
+          >
+            <Text numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit minimumFontScale={0.85} style={[styles.filterText, filterType === "social" ? styles.textWhite : styles.textSlate700]}>
+              🎉 Social ({unifiedSocialCount})
+            </Text>
+          </Pressable>
 
-      {/* Filter + Select */}
-      <View style={styles.mt16}>
-        <View style={styles.filterStack}>
-          <View style={styles.filterRow}>
-            <Pressable
-              onPress={() => setFilterType("all")}
-              style={[styles.filterBtn, filterType === "all" ? styles.filterActive : styles.filterInactive]}
-            >
-              <Text style={[styles.filterText, filterType === "all" ? styles.textWhite : styles.textSlate700]}>
-                All ({activeTotalCount})
-              </Text>
-            </Pressable>
+          <Pressable
+            onPress={() => setFilterType("calendar")}
+            style={[
+              styles.filterBtn,
+              (isAnsweredRoute || isHistory) && styles.filterBtnEven,
+              filterType === "calendar" ? styles.filterActive : styles.filterInactive,
+            ]}
+          >
+            <Text numberOfLines={1} ellipsizeMode="tail" adjustsFontSizeToFit minimumFontScale={0.85} style={[styles.filterText, filterType === "calendar" ? styles.textWhite : styles.textSlate700]}>
+              📅 Calendar ({unifiedCalendarCount})
+            </Text>
+          </Pressable>
 
-            <Pressable
-              onPress={() => setFilterType("social")}
-              style={[styles.filterBtn, filterType === "social" ? styles.filterActive : styles.filterInactive]}
-            >
-              <Text style={[styles.filterText, filterType === "social" ? styles.textWhite : styles.textSlate700]}>
-                🎉 Social ({activeSocialCount})
-              </Text>
-            </Pressable>
-
-            <Pressable
-              onPress={() => setFilterType("calendar")}
-              style={[styles.filterBtn, filterType === "calendar" ? styles.filterActive : styles.filterInactive]}
-            >
-              <Text style={[styles.filterText, filterType === "calendar" ? styles.textWhite : styles.textSlate700]}>
-                📅 Calendar ({activeCalendarCount})
-              </Text>
-            </Pressable>
-
-            {isHistory && (
-              <Pressable
-                onPress={() => router.push("/history/social-sent")}
-                style={[styles.filterBtn, styles.filterInactive]}
-              >
-                <Text style={[styles.filterText, styles.textSlate700]}>Sent</Text>
-              </Pressable>
-            )}
-
-            {canSelectBatch && (
-              <Pressable
-                onPress={toggleBatchMode}
-                style={[
-                  styles.filterSelectBtn,
-                  batchMode ? styles.selectActive : styles.selectInactive,
-                ]}
-              >
-                <Text style={[styles.filterSelectText, batchMode ? styles.textWhite : styles.textBlue700]}>
-                  {batchMode ? "Done" : "Select"}
-                </Text>
-              </Pressable>
-            )}
-          </View>
         </View>
+
+        {canSelectBatch && (
+          <View style={styles.selectToolbar}>
+            <Text style={styles.selectHint}>
+              {batchMode ? (selectedCount ? `${selectedCount} selected` : "Select items") : "Batch actions"}
+            </Text>
+
+            <View style={styles.selectActions}>
+              {batchMode && totalVisibleSelectable > 0 && (
+                <Pressable onPress={toggleSelectAllVisible} style={styles.selectGhostBtn}>
+                  <Text style={styles.selectGhostText}>
+                    {allVisibleSelected ? "Clear all" : "Select all"}
+                  </Text>
+                </Pressable>
+              )}
+
+              <Pressable onPress={toggleBatchMode} style={styles.selectPrimaryBtn}>
+                <Text style={styles.selectPrimaryText}>{batchMode ? "Done" : "Select"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
       </View>
-    </>
+    </View>
   );
+
+  const showSocialEmpty = filterType === "social" && socialInvitesToShow.length === 0;
+  const showCalendarEmpty = filterType === "calendar" && calendarEventsToShow.length === 0;
+  const showUnifiedEmpty = filterType === "all" && unifiedItems.length === 0;
 
 
   return (
@@ -1448,6 +1535,33 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
                     )}
                   </View>
                 </View>
+
+                {!isHistory && !isAnsweredRoute && !isSentRoute && (
+                  <View style={styles.quickRow}>
+                    <View style={[styles.quickPill, styles.quickPillDark]}>
+                      <Text style={[styles.quickPillLabel, styles.textWhite]}>Next up</Text>
+                      <Text numberOfLines={1} style={[styles.quickPillValue, styles.textWhite]}>
+                        {nextPendingItem ? nextPendingItem.title : "All caught up"}
+                      </Text>
+                      {nextPendingItem && (
+                        <Text style={[styles.quickPillSub, styles.textWhite]}>
+                          {nextPendingItem.whenLabel} • {formatDateShort(nextPendingItem.startDate)}{" "}
+                          {formatTime(nextPendingItem.startDate)}
+                        </Text>
+                      )}
+                    </View>
+
+                    <View style={[styles.quickPill, styles.quickPillLight]}>
+                      <Text style={[styles.quickPillLabel, styles.textSlate600]}>Needs reply</Text>
+                      <Text style={styles.quickPillValue}>
+                        {pendingTotal} pending
+                      </Text>
+                      <Text style={styles.quickPillSub}>
+                        {pendingSocialCount} social • {pendingCalendarCount} calendar
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
 
               <View style={styles.mb24}>
@@ -1467,8 +1581,11 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
                       key={invite.id}
                       invite={invite}
                       onRSVP={invite.group ? handleGroupRSVP : handleFriendRSVP}
-                      showGroup={!!invite.group}
                       readOnly
+                      showExpiredBadge={isHistory}
+                      sourceLabel={invite.group ? `📚 ${invite.group}` : "Friend"}
+                      sourceIcon={invite.group ? "👥" : "👤"}
+                      onSourcePress={invite.group ? () => openGroupDetails(invite.group) : undefined}
                       onClick={() => {
                         setSelectedInvite(invite);
                         setExpandedSections({
@@ -1477,14 +1594,6 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
                           no: Platform.OS === "ios",
                           pending: Platform.OS === "ios",
                         });
-                      }}
-                      onGroupClick={() => {
-                        if (!invite.group) return;
-                        const group = GROUPS.find((g) => g.name === invite.group);
-                        if (group) {
-                          setGroupToView(group);
-                          setShowGroupDetailsModal(true);
-                        }
                       }}
                     />
                   ))
@@ -1497,7 +1606,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
             <ScrollView
               style={styles.flex1MinHeight0}
               contentContainerStyle={styles.pb40}
-              stickyHeaderIndices={[1]}
+              stickyHeaderIndices={isHistory ? [] : [1]}
             >
               <View style={styles.headerScrollWrap} collapsable={false}>
                 {/* Header */}
@@ -1537,7 +1646,7 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
                 </View>
               </View>
 
-              <View style={styles.stickyHeaderWrap} collapsable={false}>
+              <View style={isHistory ? styles.headerScrollWrap : styles.stickyHeaderWrap} collapsable={false}>
                 {tabsAndFilters}
               </View>
 
@@ -1581,168 +1690,74 @@ export function SocialScreen({ modeOverride }: { modeOverride?: "history" | "ans
 
           {/* Content */}
           <View style={styles.mt16}>
-            {activeTab === "groups" ? (
-              <>
-                {(filterType === "all" || filterType === "social") && (
-                  <View style={styles.mb24}>
-                    <Text style={styles.sectionHeader}>
-                      🎉 Social Invites{" "}
-                      {groupSocialCount > 0 ? `(${groupSocialCount} ${statusLabel})` : ""}
-                    </Text>
-
-                    {groupInvitesToShow.length === 0 ? (
-                      <View style={styles.emptyCard}>
-                        <Text style={styles.emptyEmoji}>{socialEmptyEmoji}</Text>
-                        <Text style={styles.emptyTitle}>{socialEmptyTitle}</Text>
-                        <Text style={styles.emptyDesc}>{socialEmptyDesc}</Text>
-                      </View>
-                    ) : (
-                      groupInvitesToShow.map((invite) => (
-                        <SwipeableInviteCard
-                          key={invite.id}
-                          invite={invite}
-                          onRSVP={handleGroupRSVP}
-                          showGroup={true}
-                          readOnly={isHistory || isSentRoute}
-                          onClick={() => {
-                            setSelectedInvite(invite);
-                            setExpandedSections({
-                              going: Platform.OS === "ios",
-                              maybe: Platform.OS === "ios",
-                              no: Platform.OS === "ios",
-                              pending: Platform.OS === "ios",
-                            });
-                          }}
-                          batchMode={batchMode}
-                          isSelected={selectedInviteIds.includes(invite.id)}
-                          onToggleSelect={() => toggleInviteSelection(invite.id)}
-                          onGroupClick={() => {
-                            const group = GROUPS.find((g) => g.name === invite.group);
-                            if (group) {
-                              setGroupToView(group);
-                              setShowGroupDetailsModal(true);
-                            }
-                          }}
-                        />
-                      ))
-                    )}
-                  </View>
-                )}
-
-                {(filterType === "all" || filterType === "calendar") && (
-                  <View>
-                    <Text style={styles.sectionHeader}>
-                      📅 Calendar Events{" "}
-                      {groupCalendarCount > 0 ? `(${groupCalendarCount} ${statusLabel})` : ""}
-                    </Text>
-
-                    {groupCalendarToShow.length === 0 ? (
-                      <View style={styles.emptyCardBlue}>
-                        <Text style={styles.emptyEmoji}>{calendarEmptyEmoji}</Text>
-                        <Text style={styles.emptyTitle}>{calendarEmptyTitle}</Text>
-                        <Text style={styles.emptyDesc}>{calendarEmptyDesc}</Text>
-                      </View>
-                    ) : (
-                      groupCalendarToShow.map((event) => (
-                        <CalendarEventCard
-                          key={event.id}
-                          event={event}
-                          onAccept={(id) => handleAcceptCalendarEvent(id, true)}
-                          onDecline={(id) => handleDeclineCalendarEvent(id, true)}
-                          onEditReminder={(evt) => handleEditReminder(evt, true)}
-                          onRemove={(id) => handleRemoveFromCalendar(id, true)}
-                          showGroup={true}
-                          readOnly={isHistory || isSentRoute}
-                          batchMode={batchMode}
-                          isSelected={selectedCalendarIds.includes(event.id)}
-                          onToggleSelect={() => toggleCalendarSelection(event.id)}
-                          onGroupClick={() => {
-                            const group = GROUPS.find((g) => g.name === event.group);
-                            if (group) {
-                              setGroupToView(group);
-                              setShowGroupDetailsModal(true);
-                            }
-                          }}
-                        />
-                      ))
-                    )}
-                  </View>
-                )}
-              </>
+            {showSocialEmpty ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyEmoji}>{socialEmptyEmoji}</Text>
+                <Text style={styles.emptyTitle}>{socialEmptyTitle}</Text>
+                <Text style={styles.emptyDesc}>{socialEmptyDesc}</Text>
+              </View>
+            ) : showCalendarEmpty ? (
+              <View style={styles.emptyCardBlue}>
+                <Text style={styles.emptyEmoji}>{calendarEmptyEmoji}</Text>
+                <Text style={styles.emptyTitle}>{calendarEmptyTitle}</Text>
+                <Text style={styles.emptyDesc}>{calendarEmptyDesc}</Text>
+              </View>
+            ) : showUnifiedEmpty ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyEmoji}>{unifiedEmptyEmoji}</Text>
+                <Text style={styles.emptyTitle}>{unifiedEmptyTitle}</Text>
+                <Text style={styles.emptyDesc}>{unifiedEmptyDesc}</Text>
+              </View>
             ) : (
-              <>
-                {(filterType === "all" || filterType === "social") && (
-                  <View style={styles.mb24}>
-                    <Text style={styles.sectionHeader}>
-                      🎉 Social Invites{" "}
-                      {friendSocialCount > 0 ? `(${friendSocialCount} ${statusLabel})` : ""}
-                    </Text>
+              unifiedItems.map((item) => {
+                if (item.kind === "social") {
+                  const { invite, isGroup } = item;
+                  return (
+                    <SwipeableInviteCard
+                      key={`social-${invite.id}`}
+                      invite={invite}
+                      onRSVP={isGroup ? handleGroupRSVP : handleFriendRSVP}
+                      readOnly={isHistory || isSentRoute}
+                      showExpiredBadge={isHistory}
+                      onClick={() => {
+                        setSelectedInvite(invite);
+                        setExpandedSections({
+                          going: Platform.OS === "ios",
+                          maybe: Platform.OS === "ios",
+                          no: Platform.OS === "ios",
+                          pending: Platform.OS === "ios",
+                        });
+                      }}
+                      batchMode={batchMode}
+                      isSelected={selectedInviteIds.includes(invite.id)}
+                      onToggleSelect={() => toggleInviteSelection(invite.id)}
+                      sourceLabel={isGroup ? `📚 ${invite.group ?? "Group"}` : "Friend"}
+                      sourceIcon={isGroup ? "👥" : "👤"}
+                      onSourcePress={isGroup ? () => openGroupDetails(invite.group) : undefined}
+                    />
+                  );
+                }
 
-                    {friendInvitesToShow.length === 0 ? (
-                      <View style={styles.emptyCard}>
-                        <Text style={styles.emptyEmoji}>{socialEmptyEmoji}</Text>
-                        <Text style={styles.emptyTitle}>{socialEmptyTitle}</Text>
-                        <Text style={styles.emptyDesc}>{socialEmptyDesc}</Text>
-                      </View>
-                    ) : (
-                      friendInvitesToShow.map((invite) => (
-                        <SwipeableInviteCard
-                          key={invite.id}
-                          invite={invite}
-                          onRSVP={handleFriendRSVP}
-                          showGroup={false}
-                          readOnly={isHistory || isSentRoute}
-                          onClick={() => {
-                            setSelectedInvite(invite);
-                            setExpandedSections({
-                              going: Platform.OS === "ios",
-                              maybe: Platform.OS === "ios",
-                              no: Platform.OS === "ios",
-                              pending: Platform.OS === "ios",
-                            });
-                          }}
-                          batchMode={batchMode}
-                          isSelected={selectedInviteIds.includes(invite.id)}
-                          onToggleSelect={() => toggleInviteSelection(invite.id)}
-                        />
-                      ))
-                    )}
-                  </View>
-                )}
-
-                {(filterType === "all" || filterType === "calendar") && (
-                  <View>
-                    <Text style={styles.sectionHeader}>
-                      📅 Calendar Events{" "}
-                      {friendCalendarCount > 0 ? `(${friendCalendarCount} ${statusLabel})` : ""}
-                    </Text>
-
-                    {friendCalendarToShow.length === 0 ? (
-                      <View style={styles.emptyCardBlue}>
-                        <Text style={styles.emptyEmoji}>{calendarEmptyEmoji}</Text>
-                        <Text style={styles.emptyTitle}>{calendarEmptyTitle}</Text>
-                        <Text style={styles.emptyDesc}>{calendarEmptyDesc}</Text>
-                      </View>
-                    ) : (
-                      friendCalendarToShow.map((event) => (
-                        <CalendarEventCard
-                          key={event.id}
-                          event={event}
-                          onAccept={(id) => handleAcceptCalendarEvent(id, false)}
-                          onDecline={(id) => handleDeclineCalendarEvent(id, false)}
-                          onEditReminder={(evt) => handleEditReminder(evt, false)}
-                          onRemove={(id) => handleRemoveFromCalendar(id, false)}
-                          showGroup={false}
-                          readOnly={isHistory || isSentRoute}
-                          batchMode={batchMode}
-                          isSelected={selectedCalendarIds.includes(event.id)}
-                          onToggleSelect={() => toggleCalendarSelection(event.id)}
-                        />
-                      ))
-                    )}
-                  </View>
-                )}
-              </>
+                const { event, isGroup } = item;
+                return (
+                    <CalendarEventCard
+                      key={`calendar-${event.id}`}
+                      event={event}
+                      onAccept={(id) => handleAcceptCalendarEvent(id, isGroup)}
+                      onDecline={(id) => handleDeclineCalendarEvent(id, isGroup)}
+                      onEditReminder={(evt) => handleEditReminder(evt, isGroup)}
+                      onRemove={(id) => handleRemoveFromCalendar(id, isGroup)}
+                      readOnly={isHistory || isSentRoute}
+                      showExpiredBadge={isHistory}
+                      batchMode={batchMode}
+                      isSelected={selectedCalendarIds.includes(event.id)}
+                      onToggleSelect={() => toggleCalendarSelection(event.id)}
+                    sourceLabel={isGroup ? `📚 ${event.group ?? "Group"}` : "Friend"}
+                    sourceIcon={isGroup ? "👥" : "👤"}
+                    onSourcePress={isGroup ? () => openGroupDetails(event.group) : undefined}
+                  />
+                );
+              })
             )}
 
             {!isHistory && !isAnsweredRoute && !isSentRoute && (
@@ -2197,19 +2212,46 @@ const styles = createScaledStyles({
   tabText: { fontWeight: "800" },
 
   /* filters */
+  filterCard: { borderRadius: 16, borderWidth: 1, borderColor: "#e2e8f0", backgroundColor: "#ffffff", padding: 12 },
   filterStack: { gap: 8 },
-  filterRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  filterBtn: { flex: 1, minWidth: 120, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  filterRow: { flexDirection: "row", gap: 8 },
+  filterRowWrap: { flexWrap: "wrap" },
+  filterRowNoWrap: { flexWrap: "nowrap" },
+  filterBtn: {
+    flex: 1,
+    minWidth: 120,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterBtnEven: { flex: 1, minWidth: 0, flexBasis: 0, paddingHorizontal: 8, paddingVertical: 8 },
   filterActive: { backgroundColor: "#0f172a" },
   filterInactive: { backgroundColor: "#f1f5f9" },
-  filterText: { fontSize: 12, fontWeight: "700" },
+  filterText: { fontSize: 12, fontWeight: "700", lineHeight: 16 },
   filterSelectBtn: { marginLeft: "auto", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   filterSelectText: { fontSize: 12, fontWeight: "800" },
+  selectToolbar: { marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  selectHint: { fontSize: 12, fontWeight: "700", color: "#64748b" },
+  selectActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  selectGhostBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#cbd5e1", backgroundColor: "#ffffff" },
+  selectGhostText: { fontSize: 12, fontWeight: "800", color: "#334155" },
+  selectPrimaryBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#2563eb" },
+  selectPrimaryText: { fontSize: 12, fontWeight: "800", color: "#ffffff" },
   selectText: { fontSize: 13, fontWeight: "700" },
   selectRow: { flexDirection: "row", justifyContent: "flex-end" },
   selectBtn: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, minWidth: 120, alignItems: "center", justifyContent: "center" },
   selectActive: { backgroundColor: "#2563eb" },
   selectInactive: { backgroundColor: "#dbeafe" }, // blue-100ish
+
+  quickRow: { marginTop: 12, flexDirection: "row", gap: 10 },
+  quickPill: { flex: 1, borderRadius: 16, borderWidth: 1, padding: 12 },
+  quickPillDark: { backgroundColor: "#0f172a", borderColor: "#0f172a" },
+  quickPillLight: { backgroundColor: "#ffffff", borderColor: "#e2e8f0" },
+  quickPillLabel: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.6 },
+  quickPillValue: { marginTop: 6, fontSize: 14, fontWeight: "800", color: "#0f172a" },
+  quickPillSub: { marginTop: 4, fontSize: 11, fontWeight: "700", color: "#94a3b8" },
 
   /* batch bars */
   batchBar: { marginTop: 12, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: "#2563eb" },
@@ -2279,6 +2321,16 @@ const styles = createScaledStyles({
   cardTitle: { fontSize: 16, fontWeight: "800", color: "#0f172a" },
   groupLink: { fontSize: 14, fontWeight: "600", color: "#2563eb", textDecorationLine: "underline" },
   groupText: { fontSize: 14, fontWeight: "600", color: "#2563eb" },
+  sourcePill: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+  },
+  sourcePillText: { fontSize: 12, fontWeight: "700", color: "#4338ca" },
 
   /* RSVP pill */
   rsvpPill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
@@ -2454,6 +2506,8 @@ const styles = createScaledStyles({
   footerBtnText: { fontWeight: "900" },
   footerBtnTextPrimary: { fontWeight: "900", color: "#ffffff" },
 });
+
+
 
 
 

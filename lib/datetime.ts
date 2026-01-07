@@ -3,6 +3,22 @@ export function toISO(d: Date) {
 }
 
 export function parseISO(iso: string) {
+	// If the ISO string doesn't have a timezone (no 'Z' or '+'/'-' offset),
+	// treat it as local time to avoid date shifting issues
+	if (!iso.includes('Z') && !iso.includes('+') && !iso.includes('-', 10)) {
+		// Parse as local time by using the Date constructor with individual components
+		const [datePart, timePart] = iso.split('T');
+		const [year, month, day] = datePart.split('-').map(Number);
+
+		if (timePart) {
+			const [hour, minute, second] = timePart.split(':').map(Number);
+			return new Date(year, month - 1, day, hour, minute, second || 0);
+		}
+
+		return new Date(year, month - 1, day);
+	}
+
+	// If it has a timezone, parse normally
 	return new Date(iso);
 }
 

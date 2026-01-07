@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigation } from "@react-navigation/native";
@@ -14,7 +14,8 @@ import {
 	startOfMonth,
 } from "../../lib/datetime";
 import { useAppStore } from "../../lib/store";
-import { EventType } from "../../lib/types";
+import { Event, EventType } from "../../lib/types";
+import CreateEventModal from "../components/CreateEventModal";
 
 const WEEKDAY_LETTERS = ["S", "M", "T", "W", "T", "F", "S"];
 const INDICATOR_COLORS = ["bg-emerald-300", "bg-amber-300", "bg-rose-300"];
@@ -107,18 +108,39 @@ function addDays(date: Date, days: number) {
 
 export default function CalendarScreen() {
 	const events = useAppStore((s) => s.events);
+	const addEvent = useAppStore((s) => s.addEvent);
+	const getConflicts = useAppStore((s) => s.getConflicts);
+	const params = useLocalSearchParams<{ selectedDate?: string }>();
 
 	const today = useMemo(() => new Date(), []);
 
-	const [month, setMonth] = useState<Date>(() => startOfMonth(today));
-	const [selectedDate, setSelectedDate] = useState<Date>(today);
+	// Initialize with param date if provided, otherwise today
+	const initialDate = useMemo(() => {
+		if (params.selectedDate) {
+			const paramDate = new Date(params.selectedDate);
+			return isNaN(paramDate.getTime()) ? today : paramDate;
+		}
+		return today;
+	}, [params.selectedDate, today]);
+
+	const [month, setMonth] = useState<Date>(() => startOfMonth(initialDate));
+	const [selectedDate, setSelectedDate] = useState<Date>(initialDate);
 	const [viewMode, setViewMode] = useState<ViewMode>("calendar");
 	const [listRange, setListRange] = useState<ListRange>("week");
+	const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
 	const eventsForSelected = useMemo(() => {
 		const key = dayKeyLocal(selectedDate);
 		return events.filter((ev) => dayKeyLocal(parseISO(ev.startAt)) === key).sort(sortByStart);
 	}, [events, selectedDate]);
+
+	const handleCreateEvent = (newEvent: Omit<Event, "id">) => {
+		addEvent(newEvent);
+	};
+
+	const selectedDateConflicts = useMemo(() => {
+		return getConflicts(selectedDate);
+	}, [getConflicts, selectedDate]);
 
 	const eventsByDay = useMemo(() => {
 		const map = new Map<string, number>();
@@ -189,7 +211,8 @@ export default function CalendarScreen() {
 	}, [events, listWindowStart, listWindowEnd]);
 
 	const [showBoost, setShowBoost] = useState(false);
-	const [dismissedSignature, setDismissedSignature] = useState<string | null>(null);
+	const dismissedNotificationIds = useAppStore((s) => s.dismissedNotificationIds);
+	const dismissNotification = useAppStore((s) => s.dismissNotification);
 	const navigation = useNavigation();
 
 	const boostProfile = useMemo(() => {
@@ -234,20 +257,39 @@ export default function CalendarScreen() {
 	}, [boostProfile.tone, firstToday, todayCount]);
 
 	const triggerBoost = useCallback(() => {
-		if (dismissedSignature === boostSignature) return;
+		if (dismissedNotificationIds.includes(boostSignature)) return;
 		setShowBoost(true);
-	}, [boostSignature, dismissedSignature]);
+	}, [boostSignature, dismissedNotificationIds]);
 
 	useEffect(() => {
 		const unsubscribe = navigation.addListener("focus", () => {
-			// Reset to today when tab is focused
-			const now = new Date();
-			setSelectedDate(now);
-			setMonth(startOfMonth(now));
+			// If there's a param date, use it; otherwise reset to today
+			if (params.selectedDate) {
+				const paramDate = new Date(params.selectedDate);
+				if (!isNaN(paramDate.getTime())) {
+					setSelectedDate(paramDate);
+					setMonth(startOfMonth(paramDate));
+				}
+			} else {
+				const now = new Date();
+				setSelectedDate(now);
+				setMonth(startOfMonth(now));
+			}
 			triggerBoost();
 		});
 		return unsubscribe;
-	}, [navigation, triggerBoost]);
+	}, [navigation, params.selectedDate, triggerBoost]);
+
+	// Update selected date when params change (for navigation while already on tab)
+	useEffect(() => {
+		if (params.selectedDate) {
+			const paramDate = new Date(params.selectedDate);
+			if (!isNaN(paramDate.getTime())) {
+				setSelectedDate(paramDate);
+				setMonth(startOfMonth(paramDate));
+			}
+		}
+	}, [params.selectedDate]);
 
 	const boostDetail = firstToday
 		? `Next up: ${firstToday.title} at ${formatTime(parseISO(firstToday.startAt))}.`
@@ -322,7 +364,7 @@ export default function CalendarScreen() {
 	const cellHeight = 56;
 	const gridLineWidth = StyleSheet.hairlineWidth;
 	const gridLineColor = "#E2E8F0";
-	const gridOutlineColor = "#7C8AA3";
+	const gridOutlineColor = "#9AA6BB";
 	const gridOutlineWidth = 2;
 	const rowStyle = gridWidth
 		? ({ flexDirection: "row", width: monthGridWidth } as const)
@@ -510,7 +552,7 @@ export default function CalendarScreen() {
 							<Pressable
 								onPress={() => {
 									setShowBoost(false);
-									setDismissedSignature(boostSignature);
+									dismissNotification(boostSignature);
 								}}
 								className={`h-7 w-7 items-center justify-center rounded-full ${tone.close}`}
 							>
@@ -572,7 +614,7 @@ export default function CalendarScreen() {
 							</Text>
 						</Pressable>
 						<Pressable
-							onPress={() => router.push("/modal/create")}
+							onPress={() => setIsCreateModalOpen(true)}
 							className="ml-2 h-8 w-8 items-center justify-center rounded-full bg-white"
 							style={({ pressed }) => [{ opacity: pressed ? 0.75 : 1 }]}
 						>
@@ -633,6 +675,20 @@ export default function CalendarScreen() {
 							<Text className="text-sm font-semibold text-slate-500">{formatDateLong(selectedDate)}</Text>
 						</View>
 
+						{selectedDateConflicts.length > 0 && (
+							<View className="mt-4 mx-4 rounded-2xl border-2 border-red-200 bg-red-50 p-4">
+								<View className="flex-row items-center gap-2 mb-2">
+									<Text className="text-lg">⚠️</Text>
+									<Text className="text-base font-extrabold text-red-700">
+										{selectedDateConflicts.length} Conflict{selectedDateConflicts.length > 1 ? "s" : ""}
+									</Text>
+								</View>
+								<Text className="text-sm font-semibold text-red-600">
+									Events overlap on this day. Review times below.
+								</Text>
+							</View>
+						)}
+
 						{eventsForSelected.length === 0 ? (
 							<View className="mt-16 items-center">
 								<Text className="text-base font-semibold text-slate-400">No Events</Text>
@@ -643,11 +699,16 @@ export default function CalendarScreen() {
 									const start = parseISO(event.startAt);
 									const end = parseISO(event.endAt);
 
+									// Check if this event is in a conflict
+									const hasConflict = selectedDateConflicts.some(
+										(c) => c.event1.id === event.id || c.event2.id === event.id
+									);
+
 									return (
 										<Pressable
 											key={event.id}
 											onPress={() => router.push(`/meeting/${event.id}`)}
-											className="rounded-2xl border border-gray-200 bg-white p-3"
+											className={`rounded-2xl border ${hasConflict ? "border-2 border-red-400 bg-red-50" : "border-gray-200 bg-white"} p-3`}
 											style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
 										>
 											<View className="flex-row items-center justify-between mb-1.5">
@@ -718,7 +779,7 @@ export default function CalendarScreen() {
 										Add a new event to start filling this list.
 									</Text>
 									<Pressable
-										onPress={() => router.push("/modal/create")}
+										onPress={() => setIsCreateModalOpen(true)}
 										className="mt-4 rounded-xl bg-slate-900 px-4 py-3"
 									>
 										<Text className="text-white font-extrabold">Add event</Text>
@@ -771,6 +832,13 @@ export default function CalendarScreen() {
 					</View>
 				) : null}
 			</ScrollView>
+
+			<CreateEventModal
+				isOpen={isCreateModalOpen}
+				onClose={() => setIsCreateModalOpen(false)}
+				onSave={handleCreateEvent}
+				initialDate={selectedDate}
+			/>
 		</View>
 	);
 }

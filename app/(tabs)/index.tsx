@@ -2,34 +2,28 @@ import { router } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
 	Alert,
+	Animated,
+	Image,
 	Modal,
 	Platform,
 	Pressable,
 	ScrollView,
 	StyleSheet,
 	Text,
-	TextInput,
 	View,
 } from "react-native";
+import { dayKeyLocal, parseISO } from "../../lib/datetime";
+import { Invite, RSVPValue } from "../../lib/social";
 import { useAppStore } from "../../lib/store";
-
-type EventType = "study" | "meetup" | "class";
-
-type CalendarEvent = {
-  id: string;
-  title: string;
-  type: EventType;
-  startAt: string; // ISO-ish: "YYYY-MM-DDTHH:mm:ss"
-  endAt: string; // ISO-ish
-  location?: string;
-  notes?: string;
-};
+import { Event as CalendarEvent, EventType } from "../../lib/types";
+import CreateEventModal from "../components/CreateEventModal";
 
 const TYPE_LABEL: Record<EventType, string> = {
   study: "Study",
   meetup: "Meetup",
   class: "Class",
 };
+const BELL_ICON = require("../../assets/images/bell-icon.png");
 
 function formatTime(date: Date) {
   // RN supports toLocaleTimeString; on Android some locales may vary but this matches your web logic
@@ -42,14 +36,6 @@ function formatDateLong(date: Date) {
     month: "long",
     day: "numeric",
   });
-}
-
-function parseISO(dateString: string) {
-  return new Date(dateString);
-}
-
-function dayKeyLocal(date: Date) {
-  return date.toISOString().slice(0, 10);
 }
 
 function isSameDay(date1: Date, date2: Date) {
@@ -110,21 +96,15 @@ function getDayAbbr(date: Date) {
   return date.toLocaleDateString("en-US", { weekday: "short" });
 }
 
-// Get next 7 days - if today is Sunday, start from Monday
+// Get next 7 days starting from today
 function getNext7Days() {
   const days: Date[] = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const startDay = new Date(today);
-  if (today.getDay() === 0) {
-    // Sunday
-    startDay.setDate(today.getDate() + 1); // Start from Monday
-  }
-
   for (let i = 0; i < 7; i++) {
-    const day = new Date(startDay);
-    day.setDate(startDay.getDate() + i);
+    const day = new Date(today);
+    day.setDate(today.getDate() + i);
     days.push(day);
   }
   return days;
@@ -162,7 +142,8 @@ function WeekTimeline({
   onEventPress: (id: string) => void;
   onNavigateToCalendar: (day: Date) => void;
 }) {
-  const [days] = useState(() => getNext7Days());
+  // Use useMemo instead of useState so days update when needed
+  const days = useMemo(() => getNext7Days(), []);
   const scrollRef = useRef<ScrollView | null>(null);
 
   const getEventsForDay = (day: Date) => {
@@ -628,7 +609,7 @@ function TodayFocusCard({ event, onPress }: { event: CalendarEvent | undefined; 
 
         <View style={[styles.rowCenter, { gap: 16, marginTop: 6 }]}>
           <Text style={styles.focusMeta}>
-            {formatTime(start)} → {formatTime(end)}
+            {formatTime(start)} - {formatTime(end)}
           </Text>
           {event.location ? <Text style={styles.focusMeta}>📍 {event.location}</Text> : null}
         </View>
@@ -708,146 +689,180 @@ function QuickStatsBanner({ events }: { events: CalendarEvent[] }) {
   );
 }
 
-// Create Event Modal (RN compatibility: TextInput instead of <input type="date/time">)
-function CreateEventModal({
+// Notification Drawer Component
+function NotificationDrawer({
   isOpen,
   onClose,
-  onSave,
+  pendingSocialInvites,
+  pendingCalendarEvents,
+  onDismiss,
+  onClearAll,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (e: CalendarEvent) => void;
+  pendingSocialInvites: any[];
+  pendingCalendarEvents: any[];
+  onDismiss: (id: string) => void;
+  onClearAll: (ids: string[]) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<EventType>("meetup");
-  const [location, setLocation] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("10:00");
+  if (!isOpen) return null;
 
-  const handleSave = () => {
-    if (!title.trim()) {
-      Alert.alert("Please enter a title");
-      return;
-    }
+  const totalPending = pendingSocialInvites.length + pendingCalendarEvents.length;
 
-    const event: CalendarEvent = {
-      id: Date.now().toString(),
-      title,
-      type,
-      location,
-      notes: "",
-      startAt: `${date}T${startTime}:00`,
-      endAt: `${date}T${endTime}:00`,
-    };
-
-    onSave(event);
-    setTitle("");
-    setType("meetup");
-    setLocation("");
-    setStartTime("09:00");
-    setEndTime("10:00");
-    onClose();
+  const handleDismissInvite = (id: string) => {
+    onDismiss(id);
   };
 
-  if (!isOpen) return null;
+  const handleClearAll = () => {
+    const allIds = [...pendingSocialInvites.map((inv) => inv.id), ...pendingCalendarEvents.map((evt) => evt.id)];
+    onClearAll(allIds);
+  };
 
   return (
     <Modal visible={isOpen} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalOverlayCenter}>
-        <View style={styles.modalCard}>
-          <View style={styles.modalTopBar}>
-            <Pressable onPress={onClose}>
-              <Text style={styles.modalTopTextMuted}>Cancel</Text>
-            </Pressable>
-            <Text style={styles.modalTopTitle}>New Event</Text>
-            <Pressable onPress={handleSave}>
-              <Text style={styles.modalTopTextBold}>Save</Text>
-            </Pressable>
-          </View>
-
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-            <View>
-              <Text style={styles.inputLabel}>Title</Text>
-              <TextInput
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Event title"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
-              />
-            </View>
-
-            <View>
-              <Text style={styles.inputLabel}>Type</Text>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {(Object.entries(TYPE_LABEL) as Array<[EventType, string]>).map(([key, label]) => (
-                  <Pressable
-                    key={key}
-                    onPress={() => setType(key)}
-                    style={[
-                      styles.typePick,
-                      type === key ? styles.typePickActive : styles.typePickInactive,
-                    ]}
-                  >
-                    <Text style={[styles.typePickText, type === key ? { color: "#fff" } : { color: "#0f172a" }]}>
-                      {label}
-                    </Text>
+      <Pressable style={styles.drawerOverlay} onPress={onClose}>
+        <View style={styles.drawerContainer}>
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <View style={styles.drawerContent}>
+              {/* Header */}
+              <View style={styles.drawerHeader}>
+                <View style={[styles.rowCenter, { gap: 8 }]}>
+                  <Text style={styles.drawerTitle}>Notifications</Text>
+                  {totalPending > 0 && (
+                    <View style={styles.drawerBadge}>
+                      <Text style={styles.drawerBadgeText}>{totalPending}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={[styles.rowCenter, { gap: 8 }]}>
+                  {totalPending > 0 && (
+                    <Pressable onPress={handleClearAll} style={styles.drawerClearBtn}>
+                      <Text style={styles.drawerClearText}>Clear All</Text>
+                    </Pressable>
+                  )}
+                  <Pressable onPress={onClose} style={styles.drawerCloseBtn}>
+                    <Text style={styles.drawerCloseText}>✕</Text>
                   </Pressable>
-                ))}
+                </View>
               </View>
-            </View>
 
-            <View>
-              <Text style={styles.inputLabel}>Date</Text>
-              <TextInput
-                value={date}
-                onChangeText={setDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
-                autoCapitalize="none"
-              />
-            </View>
+              {/* Content */}
+              <ScrollView style={styles.drawerScroll} showsVerticalScrollIndicator={false}>
+                {totalPending === 0 ? (
+                  <View style={styles.drawerEmpty}>
+                    <Text style={styles.drawerEmptyEmoji}>✅</Text>
+                    <Text style={styles.drawerEmptyTitle}>All caught up!</Text>
+                    <Text style={styles.drawerEmptyText}>No pending invites or events.</Text>
+                  </View>
+                ) : (
+                  <View style={styles.drawerList}>
+                    {/* Social Invites Section */}
+                    {pendingSocialInvites.length > 0 && (
+                      <View>
+                        <View style={styles.drawerSectionHeader}>
+                          <Text style={styles.drawerSectionTitle}>Social Invites</Text>
+                          <View style={styles.drawerSectionBadge}>
+                            <Text style={styles.drawerSectionBadgeText}>{pendingSocialInvites.length}</Text>
+                          </View>
+                        </View>
+                        {pendingSocialInvites.map((invite) => (
+                          <View key={invite.id} style={styles.drawerItemWrapper}>
+                            <Pressable
+                              style={styles.drawerItem}
+                              onPress={() => {
+                                onClose();
+                                router.push("/social?filter=social");
+                              }}
+                            >
+                              <View style={styles.drawerItemIcon}>
+                                <Text style={{ fontSize: 20 }}>👥</Text>
+                              </View>
+                              <View style={styles.drawerItemContent}>
+                                <Text style={styles.drawerItemTitle}>{invite.title}</Text>
+                                <Text style={styles.drawerItemSubtitle}>
+                                  From {invite.organizer} {invite.group ? `• ${invite.group}` : ""}
+                                </Text>
+                                <Text style={styles.drawerItemTime}>{formatTime(parseISO(invite.startAt))}</Text>
+                              </View>
+                              <View style={styles.drawerItemChevron}>
+                                <Text style={{ fontSize: 16, color: "#94a3b8" }}>›</Text>
+                              </View>
+                            </Pressable>
+                            <Pressable
+                              style={styles.drawerItemDismiss}
+                              onPress={() => handleDismissInvite(invite.id)}
+                            >
+                              <Text style={styles.drawerItemDismissText}>✕</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    )}
 
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>Start</Text>
-                <TextInput
-                  value={startTime}
-                  onChangeText={setStartTime}
-                  placeholder="HH:MM"
-                  placeholderTextColor="#94a3b8"
-                  style={styles.input}
-                  autoCapitalize="none"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.inputLabel}>End</Text>
-                <TextInput
-                  value={endTime}
-                  onChangeText={setEndTime}
-                  placeholder="HH:MM"
-                  placeholderTextColor="#94a3b8"
-                  style={styles.input}
-                  autoCapitalize="none"
-                />
-              </View>
-            </View>
+                    {/* Calendar Events Section */}
+                    {pendingCalendarEvents.length > 0 && (
+                      <View style={{ marginTop: pendingSocialInvites.length > 0 ? 16 : 0 }}>
+                        <View style={styles.drawerSectionHeader}>
+                          <Text style={styles.drawerSectionTitle}>Calendar Events</Text>
+                          <View style={styles.drawerSectionBadge}>
+                            <Text style={styles.drawerSectionBadgeText}>{pendingCalendarEvents.length}</Text>
+                          </View>
+                        </View>
+                        {pendingCalendarEvents.map((event) => (
+                          <View key={event.id} style={styles.drawerItemWrapper}>
+                            <Pressable
+                              style={styles.drawerItem}
+                              onPress={() => {
+                                onClose();
+                                router.push("/social?filter=calendar");
+                              }}
+                            >
+                              <View style={styles.drawerItemIcon}>
+                                <Text style={{ fontSize: 20 }}>📅</Text>
+                              </View>
+                              <View style={styles.drawerItemContent}>
+                                <Text style={styles.drawerItemTitle}>{event.title}</Text>
+                                <Text style={styles.drawerItemSubtitle}>
+                                  From {event.creator} {event.group ? `• ${event.group}` : ""}
+                                </Text>
+                                <Text style={styles.drawerItemTime}>{formatTime(parseISO(event.startAt))}</Text>
+                              </View>
+                              <View style={styles.drawerItemChevron}>
+                                <Text style={{ fontSize: 16, color: "#94a3b8" }}>›</Text>
+                              </View>
+                            </Pressable>
+                            <Pressable
+                              style={styles.drawerItemDismiss}
+                              onPress={() => handleDismissInvite(event.id)}
+                            >
+                              <Text style={styles.drawerItemDismissText}>✕</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </ScrollView>
 
-            <View>
-              <Text style={styles.inputLabel}>Location</Text>
-              <TextInput
-                value={location}
-                onChangeText={setLocation}
-                placeholder="Add location (optional)"
-                placeholderTextColor="#94a3b8"
-                style={styles.input}
-              />
+              {/* Footer CTA */}
+              {totalPending > 0 && (
+                <View style={styles.drawerFooter}>
+                  <Pressable
+                    style={styles.drawerFooterBtn}
+                    onPress={() => {
+                      onClose();
+                      router.push("/social");
+                    }}
+                  >
+                    <Text style={styles.drawerFooterBtnText}>View All in Social</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
-          </ScrollView>
+          </Pressable>
         </View>
-      </View>
+      </Pressable>
     </Modal>
   );
 }
@@ -868,6 +883,31 @@ function EventDetailModal({
 
   const start = parseISO(event.startAt);
   const end = parseISO(event.endAt);
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const handleClose = () => {
+    translateY.setValue(0);
+    onClose();
+  };
+
+  const handlePullEnd = (offsetY: number) => {
+    const distance = offsetY < 0 ? -offsetY : 0;
+    if (distance > 120) {
+      Animated.timing(translateY, {
+        toValue: 400,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => {
+        translateY.setValue(0);
+        onClose();
+      });
+    } else if (distance > 0) {
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
 
   const handleDelete = () => {
     Alert.alert("Delete event?", "This can't be undone.", [
@@ -884,11 +924,17 @@ function EventDetailModal({
   };
 
   return (
-    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={handleClose}>
       <View style={styles.sheetOverlay}>
-        <View style={styles.sheetCard}>
+        <Animated.View
+          style={[
+            styles.sheetCard,
+            styles.sheetCardOffset,
+            { transform: [{ translateY }] },
+          ]}
+        >
           <View style={styles.modalTopBar}>
-            <Pressable onPress={onClose}>
+            <Pressable onPress={handleClose}>
               <Text style={styles.modalTopTextMuted}>Close</Text>
             </Pressable>
             <Text style={styles.modalTopTitle}>Event</Text>
@@ -911,7 +957,7 @@ function EventDetailModal({
               <View style={{ gap: 4 }}>
                 <Text style={styles.detailLabel}>Time</Text>
                 <Text style={styles.detailValue}>
-                  {formatTime(start)} – {formatTime(end)}
+                  {formatTime(start)} - {formatTime(end)}
                 </Text>
               </View>
 
@@ -923,7 +969,159 @@ function EventDetailModal({
               ) : null}
             </View>
           </ScrollView>
-        </View>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+function SocialInviteDetailModal({
+  invite,
+  isOpen,
+  onClose,
+}: {
+  invite: Invite | null;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  if (!isOpen || !invite) return null;
+
+  const start = parseISO(invite.startAt);
+  const end = parseISO(invite.endAt);
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  const handleClose = () => {
+    translateY.setValue(0);
+    onClose();
+  };
+
+  const handlePullEnd = (offsetY: number) => {
+    const distance = offsetY < 0 ? -offsetY : 0;
+    if (distance > 120) {
+      Animated.timing(translateY, {
+        toValue: 400,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => {
+        translateY.setValue(0);
+        onClose();
+      });
+    } else if (distance > 0) {
+      Animated.spring(translateY, {
+        toValue: 0,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const sections: Array<{
+    label: string;
+    status: RSVPValue | null;
+    pill: object;
+    text: object;
+  }> = [
+    { label: "Going", status: "yes", pill: styles.invitePillGreen, text: styles.invitePillTextGreen },
+    { label: "Maybe", status: "maybe", pill: styles.invitePillYellow, text: styles.invitePillTextYellow },
+    { label: "Can't Go", status: "no", pill: styles.invitePillRed, text: styles.invitePillTextRed },
+    { label: "Pending", status: null, pill: styles.invitePillSlate, text: styles.invitePillTextSlate },
+  ];
+
+  return (
+    <Modal visible={isOpen} transparent animationType="slide" onRequestClose={handleClose}>
+      <View style={styles.sheetOverlay}>
+        <Animated.View
+          style={[
+            styles.sheetCard,
+            styles.sheetCardOffset,
+            { transform: [{ translateY }] },
+          ]}
+        >
+          <View style={styles.modalTopBar}>
+            <Pressable onPress={handleClose}>
+              <Text style={styles.modalTopTextMuted}>Close</Text>
+            </Pressable>
+            <Text style={styles.modalTopTitle}>Event</Text>
+            <View style={{ width: 56 }} />
+          </View>
+
+          <ScrollView
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+            scrollEventThrottle={8}
+            decelerationRate={0.98}
+            bounces
+            alwaysBounceVertical
+            onScroll={(event) => {
+              const offsetY = event.nativeEvent.contentOffset.y;
+              if (offsetY < 0) {
+                translateY.setValue(Math.min(-offsetY, 240));
+              } else if (offsetY === 0) {
+                translateY.setValue(0);
+              }
+            }}
+            onScrollEndDrag={(event) => handlePullEnd(event.nativeEvent.contentOffset.y)}
+          >
+            <View style={styles.inviteHero}>
+              <Text style={styles.inviteHeroLabel}>Social Event</Text>
+              <Text style={styles.inviteHeroTitle}>{invite.title}</Text>
+              <Text style={styles.inviteHeroMeta}>
+                {formatDateLong(start)} | {formatTime(start)} - {formatTime(end)}
+              </Text>
+              <Text style={styles.inviteHeroMeta}>{invite.location}</Text>
+
+              <View style={styles.inviteHeroChips}>
+                <View style={styles.inviteHeroChip}>
+                  <Text style={styles.inviteHeroChipText}>{invite.organizer}</Text>
+                </View>
+                {invite.group ? (
+                  <View style={styles.inviteHeroChip}>
+                    <Text style={styles.inviteHeroChipText}>{invite.group}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+
+            <View style={styles.inviteStatsRow}>
+              {sections.map((section) => {
+                const count = invite.attendees.filter((a) => a.status === section.status).length;
+                return (
+                  <View key={section.label} style={[styles.inviteStatPill, section.pill]}>
+                    <Text style={[styles.inviteStatCount, section.text]}>{count}</Text>
+                    <Text style={[styles.inviteStatLabel, section.text]}>{section.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={{ marginTop: 12, gap: 14 }}>
+              {sections.map((section) => {
+                const attendees = invite.attendees.filter((a) => a.status === section.status);
+                return (
+                  <View key={section.label} style={styles.inviteSection}>
+                    <View style={styles.inviteSectionHeader}>
+                      <Text style={styles.inviteSectionTitle}>{section.label}</Text>
+                      <View style={[styles.inviteSectionBadge, section.pill]}>
+                        <Text style={[styles.inviteSectionBadgeText, section.text]}>{attendees.length}</Text>
+                      </View>
+                    </View>
+
+                    {attendees.length === 0 ? (
+                      <Text style={styles.inviteSectionEmpty}>No one yet</Text>
+                    ) : (
+                      attendees.map((attendee, idx) => (
+                        <View key={`${attendee.name}-${idx}`} style={styles.invitePersonRow}>
+                          <View style={styles.inviteAvatar}>
+                            <Text style={styles.inviteAvatarText}>{attendee.name.charAt(0)}</Text>
+                          </View>
+                          <Text style={styles.invitePersonName}>{attendee.name}</Text>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -932,69 +1130,30 @@ function EventDetailModal({
 // IDIOT-PROOF HOME SCREEN
 export default function HomeScreen() {
   const showMockChrome = Platform.OS === "web";
-  const [events, setEvents] = useState<CalendarEvent[]>([
-    {
-      id: "1",
-      title: "Morning standup",
-      type: "meetup",
-      startAt: new Date().toISOString().split("T")[0] + "T09:00:00",
-      endAt: new Date().toISOString().split("T")[0] + "T09:30:00",
-      location: "Conference Room A",
-      notes: "Daily team sync",
-    },
-    {
-      id: "2",
-      title: "CS 201 Lecture",
-      type: "class",
-      startAt: new Date().toISOString().split("T")[0] + "T14:00:00",
-      endAt: new Date().toISOString().split("T")[0] + "T15:30:00",
-      location: "Tech Building Room 301",
-      notes: "Data structures",
-    },
-    {
-      id: "3",
-      title: "Study group",
-      type: "study",
-      startAt: new Date().toISOString().split("T")[0] + "T18:00:00",
-      endAt: new Date().toISOString().split("T")[0] + "T20:00:00",
-      location: "Library 2nd Floor",
-      notes: "Algorithms practice",
-    },
-    {
-      id: "4",
-      title: "Coffee with Sarah",
-      type: "meetup",
-      startAt: new Date(Date.now() + 86400000).toISOString().split("T")[0] + "T10:00:00",
-      endAt: new Date(Date.now() + 86400000).toISOString().split("T")[0] + "T11:00:00",
-      location: "Campus Coffee Shop",
-      notes: "",
-    },
-    {
-      id: "5",
-      title: "Team project work",
-      type: "study",
-      startAt: new Date(Date.now() + 86400000).toISOString().split("T")[0] + "T15:00:00",
-      endAt: new Date(Date.now() + 86400000).toISOString().split("T")[0] + "T17:00:00",
-      location: "Student Center",
-      notes: "Final presentation prep",
-    },
-    {
-      id: "6",
-      title: "Late Night Study",
-      type: "study",
-      startAt: new Date(Date.now() + 86400000).toISOString().split("T")[0] + "T14:30:00",
-      endAt: new Date(Date.now() + 86400000).toISOString().split("T")[0] + "T16:00:00",
-      location: "Library",
-      notes: "Conflict test",
-    },
-  ]);
+  const events = useAppStore((s) => s.events);
+  const addEvent = useAppStore((s) => s.addEvent);
+  const deleteEvent = useAppStore((s) => s.deleteEvent);
   const groupInvites = useAppStore((s) => s.groupInvites);
   const friendInvites = useAppStore((s) => s.friendInvites);
   const groupCalendarEvents = useAppStore((s) => s.groupCalendarEvents);
   const friendCalendarEvents = useAppStore((s) => s.friendCalendarEvents);
+  const inviteNotificationDismissals = useAppStore((s) => s.inviteNotificationDismissals);
+  const dismissInviteNotification = useAppStore((s) => s.dismissInviteNotification);
+  const clearInviteNotifications = useAppStore((s) => s.clearInviteNotifications);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [selectedInvite, setSelectedInvite] = useState<Invite | null>(null);
+  const [isNotificationDrawerOpen, setIsNotificationDrawerOpen] = useState(false);
+  const [notificationDayKey, setNotificationDayKey] = useState(() => dayKeyLocal(new Date()));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const nextKey = dayKeyLocal(new Date());
+      setNotificationDayKey((prev) => (prev === nextKey ? prev : nextKey));
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const today = useMemo(() => new Date(), []);
 
@@ -1007,34 +1166,62 @@ export default function HomeScreen() {
 
   const handleEventPress = (id: string) => {
     const event = events.find((e) => e.id === id) || null;
+    if (!event) return;
+
+    const inviteMatch =
+      groupInvites.find((inv) => inv.title === event.title && inv.startAt === event.startAt) ||
+      friendInvites.find((inv) => inv.title === event.title && inv.startAt === event.startAt) ||
+      null;
+
+    if (inviteMatch) {
+      setSelectedInvite(inviteMatch);
+      setSelectedEvent(null);
+      return;
+    }
+
+    setSelectedInvite(null);
     setSelectedEvent(event);
   };
 
-  const handleCreateEvent = (newEvent: CalendarEvent) => {
-    setEvents([...events, newEvent]);
+  const handleCreateEvent = (newEvent: Omit<CalendarEvent, "id">) => {
+    addEvent(newEvent);
   };
 
   const handleDeleteEvent = (id: string) => {
-    setEvents(events.filter((e) => e.id !== id));
+    deleteEvent(id);
   };
 
   const handleNavigateToCalendar = (day: Date) => {
-    Alert.alert(`Would navigate to Calendar tab with ${formatDateLong(day)} selected`);
+    // Navigate to calendar tab with the specific date
+    router.push({
+      pathname: "/calendar",
+      params: { selectedDate: day.toISOString() },
+    });
   };
 
-  const pendingSocialCount = useMemo(() => {
-    const groupPending = groupInvites.filter((inv) => !inv.rsvpStatus).length;
-    const friendPending = friendInvites.filter((inv) => !inv.rsvpStatus).length;
-    return groupPending + friendPending;
-  }, [groupInvites, friendInvites]);
+  const pendingSocialInvites = useMemo(
+    () => [...groupInvites.filter((inv) => !inv.rsvpStatus), ...friendInvites.filter((inv) => !inv.rsvpStatus)],
+    [friendInvites, groupInvites]
+  );
+  const pendingCalendarEvents = useMemo(
+    () => [...groupCalendarEvents.filter((evt) => !evt.acceptStatus), ...friendCalendarEvents.filter((evt) => !evt.acceptStatus)],
+    [friendCalendarEvents, groupCalendarEvents]
+  );
+  const dismissedToday = inviteNotificationDismissals[notificationDayKey] ?? [];
+  const dismissedSet = useMemo(() => new Set(dismissedToday), [dismissedToday]);
+  const visibleSocialInvites = useMemo(
+    () => pendingSocialInvites.filter((inv) => !dismissedSet.has(inv.id)),
+    [dismissedSet, pendingSocialInvites]
+  );
+  const visibleCalendarEvents = useMemo(
+    () => pendingCalendarEvents.filter((evt) => !dismissedSet.has(evt.id)),
+    [dismissedSet, pendingCalendarEvents]
+  );
+  const pendingTotal = visibleSocialInvites.length + visibleCalendarEvents.length;
 
-  const pendingCalendarCount = useMemo(() => {
-    const groupPending = groupCalendarEvents.filter((evt) => !evt.acceptStatus).length;
-    const friendPending = friendCalendarEvents.filter((evt) => !evt.acceptStatus).length;
-    return groupPending + friendPending;
-  }, [groupCalendarEvents, friendCalendarEvents]);
-
-  const pendingTotal = pendingSocialCount + pendingCalendarCount;
+  const getConflicts = useAppStore((s) => s.getConflicts);
+  const todayConflicts = useMemo(() => getConflicts(today), [getConflicts, today]);
+  const hasConflicts = todayConflicts.length > 0;
 
   return (
     <View style={[styles.screenRoot, Platform.OS !== "web" && styles.screenRootNative]}>
@@ -1062,38 +1249,40 @@ export default function HomeScreen() {
               </View>
             </View>
 
-            <Pressable onPress={() => setIsCreateModalOpen(true)} style={styles.addBtn}>
-              <Text style={styles.addBtnText}>＋ Add</Text>
-            </Pressable>
+            <View style={[styles.rowCenter, { gap: 12 }]}>
+              {/* Notification Bell */}
+              <Pressable onPress={() => setIsNotificationDrawerOpen(!isNotificationDrawerOpen)} style={styles.bellBtn}>
+                <Image source={BELL_ICON} style={styles.bellImage} resizeMode="contain" />
+                {pendingTotal > 0 && (
+                  <View style={styles.bellBadge}>
+                    <Text style={styles.bellBadgeText}>{pendingTotal}</Text>
+                  </View>
+                )}
+              </Pressable>
+
+              <Pressable onPress={() => setIsCreateModalOpen(true)} style={styles.addBtn}>
+                <Text style={styles.addBtnText}>＋ Add</Text>
+              </Pressable>
+            </View>
           </View>
 
           {/* Quick Stats */}
           <QuickStatsBanner events={events} />
 
-          {/* Social Snapshot */}
-          <View style={styles.socialSection}>
-            <View style={styles.socialHeaderRow}>
-              <Text style={styles.sectionTitle}>Social</Text>
-              <Pressable onPress={() => router.push("/social")} style={styles.socialLinkBtn}>
-                <Text style={styles.socialLinkText}>Open</Text>
-              </Pressable>
-            </View>
-            <View style={styles.socialCard}>
-              <Text style={styles.socialSummary}>
-                {pendingTotal === 0
-                  ? "No pending invites."
-                  : `${pendingTotal} pending invite${pendingTotal === 1 ? "" : "s"}.`}
-              </Text>
-              <View style={styles.socialPillRow}>
-                <Pressable onPress={() => router.push("/social?filter=social")} style={styles.socialPill}>
-                  <Text style={styles.socialPillText}>Social ({pendingSocialCount})</Text>
-                </Pressable>
-                <Pressable onPress={() => router.push("/social?filter=calendar")} style={styles.socialPill}>
-                  <Text style={styles.socialPillText}>Calendar ({pendingCalendarCount})</Text>
-                </Pressable>
+          {/* Conflict Warning */}
+          {hasConflicts && (
+            <View style={{ marginTop: 16, borderRadius: 16, borderWidth: 2, borderColor: "#fecaca", backgroundColor: "#fef2f2", padding: 14 }}>
+              <View style={[styles.rowCenter, { gap: 8, marginBottom: 6 }]}>
+                <Text style={{ fontSize: 18 }}>⚠️</Text>
+                <Text style={{ fontSize: 16, fontWeight: "800", color: "#b91c1c" }}>
+                  {todayConflicts.length} Scheduling Conflict{todayConflicts.length > 1 ? "s" : ""}
+                </Text>
               </View>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: "#dc2626" }}>
+                You have overlapping events today. Check your schedule below.
+              </Text>
             </View>
-          </View>
+          )}
 
           {/* Focus Card */}
           {nextEvent ? (
@@ -1127,7 +1316,14 @@ export default function HomeScreen() {
           </Pressable>
 
           <Pressable style={styles.tabBtn} onPress={() => router.push("/social")}>
-            <Text style={styles.tabIcon}>👥</Text>
+            <View style={{ position: "relative" }}>
+              <Text style={styles.tabIcon}>👥</Text>
+              {pendingTotal > 0 && (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>{pendingTotal}</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.tabLabel}>Social</Text>
           </Pressable>
           </View>
@@ -1146,6 +1342,21 @@ export default function HomeScreen() {
         isOpen={!!selectedEvent}
         onClose={() => setSelectedEvent(null)}
         onDelete={handleDeleteEvent}
+      />
+
+      <SocialInviteDetailModal
+        invite={selectedInvite}
+        isOpen={!!selectedInvite}
+        onClose={() => setSelectedInvite(null)}
+      />
+
+      <NotificationDrawer
+        isOpen={isNotificationDrawerOpen}
+        onClose={() => setIsNotificationDrawerOpen(false)}
+        pendingSocialInvites={visibleSocialInvites}
+        pendingCalendarEvents={visibleCalendarEvents}
+        onDismiss={dismissInviteNotification}
+        onClearAll={clearInviteNotifications}
       />
     </View>
   );
@@ -1537,6 +1748,7 @@ const styles = StyleSheet.create({
   modalTopTextMuted: { color: "#475569", fontWeight: "600" },
   modalTopTitle: { color: "#0f172a", fontWeight: "600" },
   modalTopTextBold: { color: "#0f172a", fontWeight: "800" },
+  modalTopTextDisabled: { color: "#94a3b8" },
 
   inputLabel: {
     fontSize: 12,
@@ -1555,6 +1767,57 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     backgroundColor: "#fff",
   },
+  inputError: { borderColor: "#fca5a5" },
+  requiredStar: { color: "#ef4444", fontWeight: "800" },
+  pickerField: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 10,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  pickerValueText: { fontWeight: "700", color: "#0f172a" },
+  pickerChevron: { fontSize: 12, color: "#94a3b8" },
+  pickerWrap: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
+    minHeight: 180,
+  },
+  pickerModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  pickerModalSheet: { backgroundColor: "#ffffff", borderRadius: 18, padding: 16 },
+  pickerModalTitle: { fontSize: 16, fontWeight: "900", color: "#0f172a", marginBottom: 8 },
+  pickerModalFooter: { flexDirection: "row", gap: 12, marginTop: 12 },
+  pickerModalBtnPrimary: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    backgroundColor: "#0f172a",
+  },
+  pickerModalBtnSecondary: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+  },
+  pickerModalBtnTextPrimary: { color: "#fff", fontWeight: "800" },
+  pickerModalBtnTextSecondary: { color: "#0f172a", fontWeight: "800" },
   typePick: {
     flex: 1,
     borderRadius: 14,
@@ -1571,6 +1834,36 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 14,
   },
+  progressCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    padding: 14,
+  },
+  progressTitle: { fontSize: 12, fontWeight: "800", textTransform: "uppercase", color: "#64748b" },
+  progressText: { marginTop: 6, fontSize: 14, fontWeight: "700", color: "#0f172a" },
+  progressTrack: {
+    marginTop: 10,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#e2e8f0",
+    overflow: "hidden",
+  },
+  progressFill: { height: "100%", backgroundColor: "#2563eb" },
+  progressHint: { marginTop: 6, fontSize: 12, fontWeight: "700", color: "#64748b" },
+  timePickerCard: {
+    marginTop: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  timePickerValue: { fontSize: 14, fontWeight: "700", color: "#0f172a", marginBottom: 6 },
+  pickerWheel: { height: 180 },
+  helperText: { fontSize: 12, fontWeight: "600", color: "#dc2626" },
 
   sheetOverlay: {
     flex: 1,
@@ -1583,6 +1876,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     maxHeight: "90%",
     overflow: "hidden",
+  },
+  sheetCardOffset: {
+    marginTop: 240,
   },
 
   detailTitle: { fontSize: 24, fontWeight: "800", color: "#0f172a" },
@@ -1607,4 +1903,348 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 12, fontWeight: "800", textTransform: "uppercase", color: "#64748b" },
   detailValue: { marginTop: 4, fontSize: 16, fontWeight: "600", color: "#0f172a" },
+
+  inviteHero: {
+    borderRadius: 18,
+    backgroundColor: "#0f172a",
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  inviteHeroLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#cbd5e1",
+  },
+  inviteHeroTitle: { marginTop: 8, fontSize: 22, fontWeight: "800", color: "#ffffff" },
+  inviteHeroMeta: { marginTop: 6, fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.8)" },
+  inviteHeroChips: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 10 },
+  inviteHeroChip: { borderRadius: 999, backgroundColor: "rgba(255,255,255,0.18)", paddingHorizontal: 10, paddingVertical: 4 },
+  inviteHeroChipText: { color: "#ffffff", fontSize: 12, fontWeight: "700" },
+
+  inviteStatsRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  inviteStatPill: {
+    flex: 1,
+    minWidth: 120,
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderWidth: 1,
+  },
+  inviteStatCount: { fontSize: 16, fontWeight: "800" },
+  inviteStatLabel: { fontSize: 12, fontWeight: "700" },
+  invitePillGreen: { backgroundColor: "#dcfce7", borderColor: "#86efac" },
+  invitePillYellow: { backgroundColor: "#fef9c3", borderColor: "#fde047" },
+  invitePillRed: { backgroundColor: "#fee2e2", borderColor: "#fca5a5" },
+  invitePillSlate: { backgroundColor: "#e2e8f0", borderColor: "#cbd5e1" },
+  invitePillTextGreen: { color: "#15803d" },
+  invitePillTextYellow: { color: "#a16207" },
+  invitePillTextRed: { color: "#b91c1c" },
+  invitePillTextSlate: { color: "#475569" },
+  inviteSection: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+    padding: 12,
+  },
+  inviteSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  inviteSectionTitle: { fontSize: 13, fontWeight: "800", color: "#0f172a" },
+  inviteSectionBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1 },
+  inviteSectionBadgeText: { fontSize: 12, fontWeight: "800" },
+  inviteSectionEmpty: { fontSize: 12, fontWeight: "600", color: "#64748b" },
+  invitePersonRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  inviteAvatar: {
+    height: 28,
+    width: 28,
+    borderRadius: 14,
+    backgroundColor: "#0f172a",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inviteAvatarText: { color: "#fff", fontWeight: "800" },
+  invitePersonName: { fontSize: 14, fontWeight: "600", color: "#0f172a" },
+
+  // Notification Bell Styles
+  bellBtn: {
+    position: "relative",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  bellIcon: {
+    fontSize: 20,
+  },
+  bellImage: {
+    width: 36,
+    height: 36,
+  },
+  bellBadge: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    backgroundColor: "#ef4444",
+    borderRadius: 999,
+    minWidth: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  bellBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  // Notification Drawer Styles
+  drawerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-start",
+  },
+  drawerContainer: {
+    width: "100%",
+    maxHeight: "80%",
+    marginTop: 60,
+  },
+  drawerContent: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  drawerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  drawerTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0f172a",
+  },
+  drawerBadge: {
+    backgroundColor: "#ef4444",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: "center",
+  },
+  drawerBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  drawerClearBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+  },
+  drawerClearText: {
+    fontSize: 13,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  drawerCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  drawerCloseText: {
+    fontSize: 18,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+  drawerScroll: {
+    maxHeight: 400,
+  },
+  drawerEmpty: {
+    paddingVertical: 48,
+    paddingHorizontal: 20,
+    alignItems: "center",
+  },
+  drawerEmptyEmoji: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  drawerEmptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 6,
+  },
+  drawerEmptyText: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+  },
+  drawerList: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  drawerSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  drawerSectionTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  drawerSectionBadge: {
+    backgroundColor: "#e2e8f0",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: "center",
+  },
+  drawerSectionBadgeText: {
+    color: "#475569",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  drawerItemWrapper: {
+    position: "relative",
+    marginBottom: 8,
+  },
+  drawerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 12,
+    paddingRight: 48,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  drawerItemDismiss: {
+    position: "absolute",
+    right: 8,
+    top: "50%",
+    transform: [{ translateY: -16 }],
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#fee2e2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  drawerItemDismissText: {
+    fontSize: 14,
+    color: "#dc2626",
+    fontWeight: "700",
+  },
+  drawerItemIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  drawerItemContent: {
+    flex: 1,
+  },
+  drawerItemTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginBottom: 2,
+  },
+  drawerItemSubtitle: {
+    fontSize: 13,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  drawerItemTime: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0891b2",
+  },
+  drawerItemChevron: {
+    marginLeft: 8,
+  },
+  drawerFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+  },
+  drawerFooterBtn: {
+    backgroundColor: "#0f172a",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  drawerFooterBtnText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  // Tab Badge Styles
+  tabBadge: {
+    position: "absolute",
+    top: -4,
+    right: -8,
+    backgroundColor: "#ef4444",
+    borderRadius: 999,
+    minWidth: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  tabBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "800",
+  },
 });
+
